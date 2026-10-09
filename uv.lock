@@ -386,7 +386,7 @@ wheels = [
 [[package]]
 name = "ghtoolkit"
 version = "0.1.0"
-source = { directory = "/home/folium/Documents/utils/ghToolkit" }
+source = { directory = "../ghToolkit" }
 dependencies = [
     { name = "requests" },
 ]
@@ -879,7 +879,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "ghtoolkit", directory = "/home/folium/Documents/utils/ghToolkit" },
+    { name = "ghtoolkit", directory = "../ghToolkit" },
     { name = "google-genai", specifier = ">=1.0.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },

@@ -15,8 +15,8 @@ from typing import Sequence
 
 from dotenv import load_dotenv
 
-from status_reporter.models import CommitInfo, PullRequestInfo, ReviewInfo
-from status_reporter.utils import format_arrow_lines
+from status_reporter.models.models import CommitInfo, PullRequestInfo, ReviewInfo
+from status_reporter.shared.utils import format_arrow_lines
 
 warnings.filterwarnings("ignore", category=UserWarning)
 logging.getLogger("google.genai").setLevel(logging.ERROR)

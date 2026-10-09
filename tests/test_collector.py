@@ -5,8 +5,9 @@ from __future__ import annotations
 from datetime import date
 from unittest.mock import MagicMock
 
-from status_reporter.collector import ActivityCollector
-from status_reporter.models import CommitInfo, ProjectConfig, PullRequestInfo, ReviewInfo
+from ghtoolkit.models import CommitInfo, ProjectConfig, PullRequestInfo, ReviewInfo
+
+from status_reporter.collection.collector import ActivityCollector
 
 
 def test_collector_own_prs(sample_date: date) -> None:

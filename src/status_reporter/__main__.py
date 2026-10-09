@@ -2,7 +2,7 @@
 
 import sys
 
-from status_reporter.cli import main
+from status_reporter.cli.commands import main
 
 if __name__ == "__main__":
     sys.exit(main())

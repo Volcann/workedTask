@@ -13,14 +13,14 @@ import sys
 import time
 from dataclasses import dataclass, field
 
-from status_reporter.models import (
+from status_reporter.models.models import (
     DailyReport,
     ProjectActivity,
     PullRequestInfo,
     RemovedItem,
     ReviewInfo,
 )
-from status_reporter.utils import clean_commit_message
+from status_reporter.shared.utils import clean_commit_message
 
 logger = logging.getLogger(__name__)
 

@@ -8,8 +8,7 @@ from pathlib import Path
 from typing import Sequence
 
 from dotenv import load_dotenv
-
-from status_reporter.models import ProjectConfig
+from ghtoolkit.models import ProjectConfig
 
 # Automatically load .env from current directory or parent directories
 load_dotenv()

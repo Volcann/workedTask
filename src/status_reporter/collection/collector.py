@@ -7,18 +7,13 @@ import sys
 from datetime import date
 from typing import Sequence
 
-from status_reporter.ai_enhancer import AIEnhancer
-from status_reporter.github_client import GitHubClient, is_author_match
-from status_reporter.models import (
-    BranchActivity,
-    CommitInfo,
-    DailyReport,
-    ProjectActivity,
-    ProjectConfig,
-    PullRequestInfo,
-    ReviewInfo,
-)
-from status_reporter.utils import (
+from ghtoolkit import GitHubClient
+from ghtoolkit.github_client import is_author_match
+from ghtoolkit.models import CommitInfo, ProjectConfig, PullRequestInfo, ReviewInfo
+
+from status_reporter.processing.ai_enhancer import AIEnhancer
+from status_reporter.models.models import BranchActivity, DailyReport, ProjectActivity
+from status_reporter.shared.utils import (
     clean_commit_message,
     clean_markdown_bullets,
     format_status_date,

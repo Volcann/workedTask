@@ -7,23 +7,24 @@ import os
 import sys
 from pathlib import Path
 
-from status_reporter.ai_enhancer import AIEnhancer
-from status_reporter.collector import ActivityCollector
-from status_reporter.config import (
+from ghtoolkit import GitHubClient
+
+from status_reporter.processing.ai_enhancer import AIEnhancer
+from status_reporter.collection.collector import ActivityCollector
+from status_reporter.config.loader import (
     add_project,
     filter_projects,
     load_projects,
     remove_project,
     resolve_config_path,
 )
-from status_reporter.demo_data import (
+from status_reporter.shared.demo_data import (
     get_demo_report_1,
     get_demo_report_2,
     get_demo_report_3,
 )
-from status_reporter.formatter import StatusReportFormatter
-from status_reporter.github_client import GitHubClient
-from status_reporter.utils import parse_target_date
+from status_reporter.presentation.formatter import StatusReportFormatter
+from status_reporter.shared.utils import parse_target_date
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -248,7 +249,7 @@ def handle_projects_command(args: argparse.Namespace) -> int:
 
 def handle_clean_reports_command(args: argparse.Namespace) -> int:
     """Handle clean-reports subcommand."""
-    from status_reporter.utils import clean_reports_directory
+    from status_reporter.shared.utils import clean_reports_directory
 
     reports_dir = getattr(args, "reports_dir", "reports")
     keep = getattr(args, "keep", None)
@@ -354,7 +355,7 @@ def main(argv: list[str] | None = None) -> int:
     # 2.5. Pass through Validation Pipeline
     val_result = None
     if getattr(args, "validate", True):
-        from status_reporter.validator import StatusValidator
+        from status_reporter.config.validator import StatusValidator
 
         validator = StatusValidator(
             sleep_interval=getattr(args, "sleep", 0.0),

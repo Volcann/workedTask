@@ -24,7 +24,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "requests>=2.28.0",
     "google-genai>=1.0.0",
-    "ghtoolkit @ file:///home/folium/Documents/utils/ghToolkit",
+    "ghtoolkit @ file://../ghToolkit",
 ]
 
 [project.optional-dependencies]

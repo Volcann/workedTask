@@ -16,6 +16,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Checkout ghToolkit dependency
+        uses: actions/checkout@v4
+        with:
+          repository: Volcann/ghToolkit
+          path: ../ghToolkit
+
       - name: Install uv
         uses: astral-sh/setup-uv@v3
         with:

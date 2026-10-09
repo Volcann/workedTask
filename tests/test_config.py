@@ -5,14 +5,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from status_reporter.config import (
+from ghtoolkit.models import ProjectConfig
+
+from status_reporter.config.loader import (
     add_project,
     filter_projects,
     load_projects,
     remove_project,
     save_projects,
 )
-from status_reporter.models import ProjectConfig
 
 
 def test_load_projects_from_file(tmp_path: Path) -> None:

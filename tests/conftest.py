@@ -5,8 +5,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
-from status_reporter.models import ProjectConfig
+from ghtoolkit.models import ProjectConfig
 
 
 @pytest.fixture

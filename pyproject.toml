@@ -7,7 +7,7 @@ name = "status-reporter"
 version = "0.1.0"
 description = "Automated daily GitHub commit, PR, review, and contribution status reporter CLI"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [
     { name = "Volcann" }
@@ -24,6 +24,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "requests>=2.28.0",
     "google-genai>=1.0.0",
+    "ghtoolkit @ file:///home/folium/Documents/utils/ghToolkit",
 ]
 
 [project.optional-dependencies]

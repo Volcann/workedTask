@@ -266,7 +266,6 @@ workedTask/
 │       ├── config.py          # projects.json loader, dynamic manager, and env loader
 │       ├── demo_data.py       # Canonical reference datasets for prompt examples
 │       ├── formatter.py       # Canonically styled report renderer
-│       ├── github_client.py   # GitHub CLI (`gh`) and REST API client
 │       ├── models.py          # Strongly typed domain dataclasses
 │       └── utils.py           # Date parsers, ticket regex, and string cleaners
 └── tests/
@@ -276,5 +275,4 @@ workedTask/
     ├── test_config.py         # Dynamic projects.json configuration tests
     ├── test_date_utils.py     # Multi-format date parsing and text cleaning tests
     ├── test_formatter.py      # Formatting fidelity tests for Examples 1, 2, and 3
-    └── test_github_client.py  # Mocked GitHub API and CLI interaction tests
 ```

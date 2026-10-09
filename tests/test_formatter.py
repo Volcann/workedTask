@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from status_reporter.demo_data import (
+from status_reporter.shared.demo_data import (
     get_demo_report_1,
     get_demo_report_2,
     get_demo_report_3,
 )
-from status_reporter.formatter import StatusReportFormatter
-from status_reporter.models import (
+from status_reporter.presentation.formatter import StatusReportFormatter
+from status_reporter.models.models import (
     BranchActivity,
     CommitInfo,
     DailyReport,

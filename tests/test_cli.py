@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from status_reporter.cli import main
+from status_reporter.cli.commands import main
 
 
 def test_cli_demo_1_creates_file(tmp_path: Path) -> None:

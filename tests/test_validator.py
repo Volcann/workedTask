@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from datetime import date
 
-from status_reporter.models.models import (
+from models.models import (
     CommitInfo,
     DailyReport,
     ProjectActivity,
     PullRequestInfo,
 )
-from status_reporter.config.validator import StatusValidator
+from config.validator import StatusValidator
 
 
 def test_validator_removes_hallucinated_endpoint_claims() -> None:
@@ -218,7 +218,7 @@ def test_validator_format_summary() -> None:
     assert "All claims verified" in result.format_summary()
 
     # With removed items
-    from status_reporter.models.models import RemovedItem
+    from models.models import RemovedItem
 
     result.removed_items.append(
         RemovedItem(

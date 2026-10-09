@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from status_reporter.processing.ai_enhancer import DEFAULT_FREE_MODELS, AIEnhancer
-from status_reporter.models.models import CommitInfo, PullRequestInfo, ReviewInfo
+from processing.ai_enhancer import DEFAULT_FREE_MODELS, AIEnhancer
+from models.models import CommitInfo, PullRequestInfo, ReviewInfo
 
 
 def test_ai_enhancer_initialization() -> None:
@@ -17,7 +17,7 @@ def test_ai_enhancer_initialization() -> None:
 
 def test_ai_enhancer_cache_mechanism(tmp_path) -> None:
     cache_file = tmp_path / "test_cache.json"
-    with patch("status_reporter.processing.ai_enhancer.CACHE_FILE", cache_file):
+    with patch("processing.ai_enhancer.CACHE_FILE", cache_file):
         enhancer = AIEnhancer(api_key="fake-key", cache_enabled=True)
 
         fake_client = MagicMock()
@@ -49,7 +49,7 @@ def test_ai_enhancer_cache_mechanism(tmp_path) -> None:
 
 def test_ai_enhancer_model_failover_on_rate_limit(tmp_path) -> None:
     cache_file = tmp_path / "test_cache.json"
-    with patch("status_reporter.processing.ai_enhancer.CACHE_FILE", cache_file):
+    with patch("processing.ai_enhancer.CACHE_FILE", cache_file):
         enhancer = AIEnhancer(
             api_key="fake-key",
             model="gemini-2.5-flash",
@@ -81,7 +81,7 @@ def test_ai_enhancer_model_failover_on_rate_limit(tmp_path) -> None:
 
 def test_ai_enhancer_summarize_review(tmp_path) -> None:
     cache_file = tmp_path / "test_cache.json"
-    with patch("status_reporter.processing.ai_enhancer.CACHE_FILE", cache_file):
+    with patch("processing.ai_enhancer.CACHE_FILE", cache_file):
         enhancer = AIEnhancer(api_key="fake-key", cache_enabled=True)
 
         fake_client = MagicMock()

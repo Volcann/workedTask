@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from status_reporter.models.models import (
+from models.models import (
     DailyReport,
     ProjectActivity,
     PullRequestInfo,

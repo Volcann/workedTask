@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ghtoolkit.models import ProjectConfig
 
-from status_reporter.config.loader import (
+from config.loader import (
     add_project,
     filter_projects,
     load_projects,

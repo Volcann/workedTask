@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 from ghtoolkit.models import CommitInfo, ProjectConfig, PullRequestInfo, ReviewInfo
 
-from status_reporter.collection.collector import ActivityCollector
+from collection.collector import ActivityCollector
 
 
 def test_collector_own_prs(sample_date: date) -> None:

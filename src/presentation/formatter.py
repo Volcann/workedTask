@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from status_reporter.models.models import (
+from models.models import (
     BranchActivity,
     DailyReport,
     ProjectActivity,
     PullRequestInfo,
     ReviewInfo,
 )
-from status_reporter.shared.utils import format_arrow_lines
+from shared.utils import format_arrow_lines
 
 
 class StatusReportFormatter:

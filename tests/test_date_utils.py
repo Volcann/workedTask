@@ -6,7 +6,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from status_reporter.shared.utils import (
+from shared.utils import (
     clean_commit_message,
     clean_markdown_bullets,
     extract_ticket_prefix,

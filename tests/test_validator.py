@@ -1,20 +1,17 @@
-"""Tests for status_reporter.validator (Validation Pipeline)."""
-
 from __future__ import annotations
 
 from datetime import date
 
+from config.validator import StatusValidator
 from models.models import (
     CommitInfo,
     DailyReport,
     ProjectActivity,
     PullRequestInfo,
 )
-from config.validator import StatusValidator
 
 
 def test_validator_removes_hallucinated_endpoint_claims() -> None:
-    """Validator strips fictitious endpoints and delivery testing claims without API files."""
     pr = PullRequestInfo(
         number=393,
         title="HMT-215: BE | Implement In App Notifications",
@@ -105,7 +102,6 @@ def test_validator_removes_hallucinated_endpoint_claims() -> None:
 
 
 def test_validator_removes_invalid_commit_hash() -> None:
-    """Validator removes bullet citing a commit hash that does not exist in author commits."""
     pr = PullRequestInfo(
         number=388,
         title="HMT-273 | Add early checkout grace period support",
@@ -158,7 +154,6 @@ def test_validator_removes_invalid_commit_hash() -> None:
 
 
 def test_validator_fallback_when_all_bullets_filtered() -> None:
-    """When all bullets fail validation, validator synthesizes grounded fallback from commit headlines."""
     pr = PullRequestInfo(
         number=393,
         title="HMT-215: BE | Implement In App Notifications",
@@ -206,7 +201,6 @@ def test_validator_fallback_when_all_bullets_filtered() -> None:
 
 
 def test_validator_format_summary() -> None:
-    """Format summary returns clean audit explanation."""
     report = DailyReport(
         target_date=date(2026, 9, 24),
         date_display="24-SEP-2026",

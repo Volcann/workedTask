@@ -1,5 +1,3 @@
-"""Activity collector orchestrating GitHub queries across configured projects."""
-
 from __future__ import annotations
 
 import logging
@@ -11,8 +9,8 @@ from ghtoolkit import GitHubClient
 from ghtoolkit.github_client import is_author_match
 from ghtoolkit.models import CommitInfo, ProjectConfig, PullRequestInfo, ReviewInfo
 
-from processing.ai_enhancer import AIEnhancer
 from models.models import BranchActivity, DailyReport, ProjectActivity
+from processing.ai_enhancer import AIEnhancer
 from shared.utils import (
     clean_commit_message,
     clean_markdown_bullets,
@@ -23,8 +21,6 @@ logger = logging.getLogger(__name__)
 
 
 class ActivityCollector:
-    """Collects daily commits, pull requests, reviews, and contributions across projects."""
-
     def __init__(
         self,
         github_client: GitHubClient | None = None,
@@ -42,7 +38,6 @@ class ActivityCollector:
         projects: Sequence[ProjectConfig],
         target_date: date,
     ) -> DailyReport:
-        """Scan all projects for a specific date and compile a DailyReport."""
         project_activities: list[ProjectActivity] = []
 
         for p in projects:
@@ -64,7 +59,6 @@ class ActivityCollector:
         project: ProjectConfig,
         target_date: date,
     ) -> ProjectActivity:
-        """Collect activity for a single project configuration."""
         owner = project.owner
         repo = project.repo
         author = project.author
@@ -84,7 +78,7 @@ class ActivityCollector:
             )
             print(f"   ↳ Author: {author}", file=sys.stderr)
 
-        # 1. Fetch own PRs created/merged on that day
+        # Fetch own PRs created/merged on that day
         prs = self.github_client.get_user_prs_for_date(
             owner, repo, author, target_date, local_path=local_path
         )
@@ -93,8 +87,7 @@ class ActivityCollector:
             pr.project_name = project.name
             pr.category = project.category
 
-            # Search results do not always contain commit details. Hydrate the PR
-            # before attributing implementation work to the configured author.
+            # Search results omit commit details — hydrate before attributing work
             if not pr.commits:
                 full_pr = self.github_client.get_pr_details(
                     owner, repo, pr.number, local_path=local_path, author=author
@@ -115,7 +108,7 @@ class ActivityCollector:
             ]
             own_prs_map[pr.number] = pr
 
-        # 2. Fetch commits on that day
+        # Fetch commits on that day
         commits = self.github_client.get_user_commits_for_date(
             owner, repo, author, target_date, local_path=local_path
         )
@@ -133,7 +126,6 @@ class ActivityCollector:
         branch_commits_map: dict[str, list[CommitInfo]] = {}
 
         for commit in commits:
-            # Check if this commit belongs to an already loaded own PR
             matched_pr_num = None
             for pr_num, pr in own_prs_map.items():
                 if any(c.sha == commit.sha for c in pr.commits):
@@ -165,7 +157,6 @@ class ActivityCollector:
                     )
                 continue
 
-            # Check what PRs this commit belongs to via git ancestry or GitHub API
             pulls = self.github_client.get_commit_pull_requests(
                 owner, repo, commit.sha, local_path=local_path
             )
@@ -182,7 +173,6 @@ class ActivityCollector:
                         ):
                             foreign_prs_map[pr_num].author_commits.append(commit)
                     else:
-                        # Fetch full PR details
                         full_pr = self.github_client.get_pr_details(
                             owner, repo, pr_num, local_path=local_path, author=author
                         )
@@ -206,7 +196,7 @@ class ActivityCollector:
                             file=sys.stderr,
                         )
             else:
-                # Commit is not in any PR -> Standalone branch commit
+                # Standalone branch commit — not part of any PR
                 branch = (
                     commit.branch
                     or self.github_client.get_commit_branch(
@@ -225,7 +215,7 @@ class ActivityCollector:
                         file=sys.stderr,
                     )
 
-        # 3. Fetch reviewed PRs and their comments
+        # Fetch reviewed PRs and their user comments
         reviewed = self.github_client.get_user_reviewed_prs_for_date(
             owner, repo, author, target_date, local_path=local_path
         )
@@ -262,7 +252,6 @@ class ActivityCollector:
             else:
                 print(f"   ↳ No reviewed PRs on {target_date}", file=sys.stderr)
 
-        # Fetch PR comments for own and foreign PRs
         for pr in (*own_prs_map.values(), *foreign_prs_map.values()):
             if pr.number:
                 comments = self.github_client.get_pr_user_comments(
@@ -277,7 +266,6 @@ class ActivityCollector:
                                 file=sys.stderr,
                             )
 
-        # 4. Summarize PRs
         total_prs = len(own_prs_map) + len(foreign_prs_map)
         if self.verbose and total_prs > 0:
             engine_name = (
@@ -290,17 +278,14 @@ class ActivityCollector:
                 file=sys.stderr,
             )
 
-        # Synthesize bullets for own PRs
         for pr in own_prs_map.values():
             pr.bullets = self._synthesize_pr_bullets(pr, is_foreign=False)
             activity.own_prs.append(pr)
 
-        # Synthesize bullets for foreign PRs
         for pr in foreign_prs_map.values():
             pr.bullets = self._synthesize_pr_bullets(pr, is_foreign=True)
             activity.foreign_contributions.append(pr)
 
-        # 5. Assemble branch activities
         for b_name, b_commits in branch_commits_map.items():
             activity.branch_commits.append(
                 BranchActivity(
@@ -318,13 +303,10 @@ class ActivityCollector:
         pr: PullRequestInfo,
         is_foreign: bool = False,
     ) -> list[str]:
-        """Synthesize bullets either with AI or deterministic fallback."""
-        # Never fall back to every commit in the PR. Mixed-author PRs are common,
-        # and doing so would present teammates' implementation work as the
-        # configured contributor's own work.
+        # Only use commits attributed to the configured author — never fall back to
+        # all PR commits, as mixed-author PRs would misattribute teammates' work.
         author_commits = pr.author_commits
 
-        # Try AI synthesis if available
         if author_commits and self.use_ai and self.ai_enhancer.is_available:
             ai_bullets = self.ai_enhancer.summarize_pr(
                 pr, author_commits, is_foreign=is_foreign, comments=pr.comments
@@ -332,7 +314,6 @@ class ActivityCollector:
             if ai_bullets:
                 return ai_bullets
 
-        # Deterministic generation
         bullets: list[str] = []
 
         if is_foreign:
@@ -350,8 +331,8 @@ class ActivityCollector:
                     if cleaned and cleaned not in bullets:
                         bullets.append(cleaned)
         else:
-            # Describe implementation only from commits attributed to the
-            # configured contributor. A PR body can summarize teammates' work.
+            # Describe only work from commits by the configured contributor;
+            # the PR body can summarize teammates' work and must not be used.
             if author_commits:
                 summary_text = clean_commit_message(author_commits[0].headline)
                 bullets.append(f"PR#{pr.number} -> {summary_text}")
@@ -373,17 +354,14 @@ class ActivityCollector:
         return bullets
 
     def _synthesize_review_bullets(self, review: ReviewInfo) -> list[str]:
-        """Synthesize bullets for a reviewed PR evaluating severe issues or test notes."""
         if not review.comments:
             return []
 
-        # Try AI synthesis if available
         if self.use_ai and self.ai_enhancer.is_available:
             ai_bullets = self.ai_enhancer.summarize_review(review, review.comments)
             if ai_bullets:
                 return ai_bullets
 
-        # Deterministic fallback: clean and format comments
         bullets: list[str] = []
         for c in review.comments:
             cleaned = c.strip()

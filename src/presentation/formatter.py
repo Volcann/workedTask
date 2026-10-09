@@ -1,5 +1,3 @@
-"""Status report formatting engine producing user-specified report formats."""
-
 from __future__ import annotations
 
 from models.models import (
@@ -13,10 +11,7 @@ from shared.utils import format_arrow_lines
 
 
 class StatusReportFormatter:
-    """Format collected activities into canonical engineering status reports."""
-
     def format_report(self, report: DailyReport) -> str:
-        """Render a complete DailyReport into the exact formatted status string."""
         lines: list[str] = [f"STATUS ({report.date_display})"]
 
         # Group activities by project name (e.g. "HR-Tool")
@@ -29,7 +24,6 @@ class StatusReportFormatter:
                 lines.append("")
             lines.append(proj_name)
 
-            # Check for reviewed PRs across all sub-activities of this project
             all_reviews: list[ReviewInfo] = []
             for act in acts:
                 all_reviews.extend(act.reviewed_prs)
@@ -50,7 +44,6 @@ class StatusReportFormatter:
                                 lines.extend(formatted_c)
                 lines.append("")
 
-            # Check if there are distinct categories like Backend vs Frontend
             has_frontend = any(act.category.lower() == "frontend" for act in acts)
             has_backend = any(act.category.lower() == "backend" for act in acts)
             should_show_category_headers = has_frontend and has_backend
@@ -61,7 +54,6 @@ class StatusReportFormatter:
                         lines.append("")
                     lines.append(f"{act.category} PR:")
 
-                # Render foreign contributions and own PRs
                 combined_prs: list[PullRequestInfo] = [*act.foreign_contributions, *act.own_prs]
 
                 for pr in combined_prs:
@@ -69,19 +61,16 @@ class StatusReportFormatter:
                     lines.extend(pr_lines)
                     lines.append("")
 
-                # Render standalone branch commits if present
                 for branch in act.branch_commits:
                     branch_lines = self._format_branch_entry(branch)
                     lines.extend(branch_lines)
                     lines.append("")
 
-                # Render standalone project notes
                 for note in act.notes:
                     formatted_note = format_arrow_lines([note])
                     lines.extend(formatted_note)
                     lines.append("")
 
-            # Clean up trailing blank lines inside project
             while lines and lines[-1] == "":
                 lines.pop()
 
@@ -90,7 +79,6 @@ class StatusReportFormatter:
         return report_text
 
     def _format_pr_entry(self, pr: PullRequestInfo) -> list[str]:
-        """Format an individual Pull Request entry."""
         entry_lines: list[str] = [pr.title]
 
         bullets = pr.bullets
@@ -112,7 +100,6 @@ class StatusReportFormatter:
         return entry_lines
 
     def _format_branch_entry(self, branch: BranchActivity) -> list[str]:
-        """Format direct commits inside a branch."""
         lines: list[str] = [f"Inside branch {branch.branch_name}:"]
         commit_bullets = [
             f"-> {c.headline}" if not c.headline.startswith("->") else c.headline
@@ -123,6 +110,5 @@ class StatusReportFormatter:
 
 
 def format_status_report(report: DailyReport) -> str:
-    """Convenience helper to format a DailyReport."""
     formatter = StatusReportFormatter()
     return formatter.format_report(report)

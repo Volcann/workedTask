@@ -1,5 +1,3 @@
-"""Configuration management for projects.json and environment settings."""
-
 from __future__ import annotations
 
 import json
@@ -10,7 +8,6 @@ from typing import Sequence
 from dotenv import load_dotenv
 from ghtoolkit.models import ProjectConfig
 
-# Automatically load .env from current directory or parent directories
 load_dotenv()
 load_dotenv("/home/folium/Documents/volcanai/.env")
 
@@ -21,7 +18,6 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN", "")
 
 
 def get_default_projects() -> list[ProjectConfig]:
-    """Default fallback project list if no projects.json exists."""
     return [
         ProjectConfig(
             name="HR-Tool",
@@ -41,12 +37,11 @@ def get_default_projects() -> list[ProjectConfig]:
 
 
 def resolve_config_path(custom_path: str | Path | None = None) -> Path:
-    """Resolve the path to projects.json."""
     if custom_path:
         return Path(custom_path)
     if DEFAULT_PROJECTS_FILE.exists():
         return DEFAULT_PROJECTS_FILE
-    # Fallback to volcanai projects.json if local is absent
+    # Fall back to shared volcanai projects.json when no local file exists
     volcanai_projects = Path("/home/folium/Documents/volcanai/cron_job/projects.json")
     if volcanai_projects.exists():
         return volcanai_projects
@@ -54,7 +49,6 @@ def resolve_config_path(custom_path: str | Path | None = None) -> Path:
 
 
 def load_projects(config_path: str | Path | None = None) -> list[ProjectConfig]:
-    """Load project configurations from JSON file."""
     path = resolve_config_path(config_path)
     if not path.exists():
         return get_default_projects()
@@ -74,7 +68,6 @@ def save_projects(
     projects: Sequence[ProjectConfig],
     config_path: str | Path | None = None,
 ) -> Path:
-    """Save project configurations to JSON file."""
     path = Path(config_path) if config_path else DEFAULT_PROJECTS_FILE
     serialized = [p.to_dict() for p in projects]
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -92,11 +85,10 @@ def add_project(
     local_path: str = "",
     config_path: str | Path | None = None,
 ) -> ProjectConfig:
-    """Add a new project to projects.json or update existing."""
     projects = load_projects(config_path)
     author_val = author or DEFAULT_AUTHOR
 
-    # Auto-discover local repo path if not explicitly provided
+    # Auto-discover local repo path when not explicitly provided
     resolved_local_path = local_path
     if not resolved_local_path:
         candidates = [
@@ -119,7 +111,6 @@ def add_project(
         local_path=resolved_local_path,
     )
 
-    # Check if duplicate exists
     updated = False
     for i, p in enumerate(projects):
         if p.owner.lower() == owner.lower() and p.repo.lower() == repo.lower():
@@ -139,7 +130,6 @@ def remove_project(
     repo: str,
     config_path: str | Path | None = None,
 ) -> bool:
-    """Remove a project from projects.json by owner and repo."""
     projects = load_projects(config_path)
     initial_len = len(projects)
     filtered = [
@@ -159,7 +149,6 @@ def filter_projects(
     category: str | None = None,
     repo: str | None = None,
 ) -> list[ProjectConfig]:
-    """Filter projects by project name, category, or repo."""
     result: list[ProjectConfig] = []
     for p in projects:
         if not p.enabled:

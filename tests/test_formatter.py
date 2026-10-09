@@ -1,19 +1,17 @@
-"""Tests for StatusReportFormatter ensuring exact alignment with expected report formats."""
-
 from __future__ import annotations
 
-from shared.demo_data import (
-    get_demo_report_1,
-    get_demo_report_2,
-    get_demo_report_3,
-)
-from presentation.formatter import StatusReportFormatter
 from models.models import (
     BranchActivity,
     CommitInfo,
     DailyReport,
     ProjectActivity,
     ReviewInfo,
+)
+from presentation.formatter import StatusReportFormatter
+from shared.demo_data import (
+    get_demo_report_1,
+    get_demo_report_2,
+    get_demo_report_3,
 )
 
 

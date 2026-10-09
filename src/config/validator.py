@@ -1,9 +1,3 @@
-"""Validation Pipeline for verifying status report claims against ground-truth Git evidence.
-
-Filters out hallucinated, misleading, or low-evidence claims (such as fabricated endpoints,
-unsupported testing assertions, or nonexistent commit hashes) and reports what was removed and why.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -176,8 +170,6 @@ STOPWORDS = {
 
 @dataclass
 class ValidationResult:
-    """Result of passing a report or activity through the validation pipeline."""
-
     report: DailyReport
     total_checked: int = 0
     total_passed: int = 0
@@ -189,7 +181,6 @@ class ValidationResult:
         return bool(self.removed_items)
 
     def format_summary(self) -> str:
-        """Format a human-readable summary of removed items and rationale."""
         if not self.removed_items:
             return "✅ Validation Pipeline: All claims verified against Git commits and diffs (0 removed)."
 
@@ -203,8 +194,6 @@ class ValidationResult:
 
 
 class StatusValidator:
-    """Validates daily status report items against actual Git commits, diffs, and PR evidence."""
-
     def __init__(
         self,
         sleep_interval: float = 0.0,
@@ -218,7 +207,6 @@ class StatusValidator:
         self.strict_commits = strict_commits
 
     def _sleep_pacing(self) -> None:
-        """Pause execution to preserve API rate limits and quota if sleep_interval > 0."""
         if self.sleep_interval > 0 and not os.getenv("PYTEST_CURRENT_TEST"):
             if self.verbose:
                 print(
@@ -228,7 +216,6 @@ class StatusValidator:
             time.sleep(self.sleep_interval)
 
     def validate_report(self, report: DailyReport) -> ValidationResult:
-        """Validate an entire DailyReport, stripping low-validation claims and logging reasons."""
         result = ValidationResult(report=report)
 
         for project_activity in report.projects:
@@ -242,7 +229,6 @@ class StatusValidator:
         activity: ProjectActivity,
         result: ValidationResult,
     ) -> None:
-        """Validate activities for a single project configuration."""
         for pr in activity.own_prs:
             self._validate_pr_bullets(pr, activity, is_foreign=False, result=result)
 
@@ -259,7 +245,6 @@ class StatusValidator:
         is_foreign: bool,
         result: ValidationResult,
     ) -> None:
-        """Validate bullets for a pull request against author commits, diffs, and comments."""
         if not pr.bullets:
             return
 
@@ -267,17 +252,14 @@ class StatusValidator:
         valid_shas = {c.short_sha.lower() for c in author_commits if c.short_sha}
         valid_shas.update(c.sha[:7].lower() for c in author_commits if c.sha)
 
-        # Collect changed files across author commits and PR
         changed_files: set[str] = set()
         for c in author_commits:
             changed_files.update(c.files)
         changed_files.update(pr.files_changed)
 
-        # Build corpus of verified commit messages and bodies
         commit_corpus = " ".join(f"{c.headline} {c.body}" for c in author_commits).lower()
         pr_corpus = f"{pr.title} {pr.body} {' '.join(pr.comments)} {commit_corpus}".lower()
 
-        # Determine if any API endpoint/view/url files were touched
         has_api_files = any(
             re.search(
                 r"(?:views?|urls?|routes?|endpoints?|serializers?|controllers?|api\/)",
@@ -295,7 +277,7 @@ class StatusValidator:
             if not clean_b:
                 continue
 
-            # Keep canonical header for foreign PRs
+            # Keep canonical header line for foreign PR contributions
             if is_foreign and clean_b.startswith(f"PR#{pr.number} -> Contributed authored commit"):
                 validated_bullets.append(bullet)
                 result.total_passed += 1
@@ -322,7 +304,6 @@ class StatusValidator:
 
             # Check 2: Endpoint creation & testing verification
             if self.strict_endpoints:
-                # Detect claims of endpoint creation or specific endpoint routes
                 has_endpoint_mention = bool(
                     re.search(
                         r"(?:added|created|implemented|new|delivery)\s+(?:[a-zA-Z0-9_\-\s]*)(?:endpoints?|api endpoints?)",
@@ -336,11 +317,10 @@ class StatusValidator:
                 )
 
                 if has_endpoint_mention:
-                    # 1. Look for explicit route mentioned in the bullet
                     route_match = re.search(r"(\/api\/v\d+\/[a-zA-Z0-9_\-\/]+)", clean_b)
                     if route_match:
                         route = route_match.group(1).lower()
-                        # The route must explicitly appear in commit messages, bodies, or PR comments
+                        # Route must appear verbatim in commit messages or PR comments
                         if route not in pr_corpus:
                             reason = (
                                 f"Referenced fictitious endpoint '{route_match.group(1)}' and delivery testing "
@@ -357,8 +337,6 @@ class StatusValidator:
                             )
                             continue
 
-                    # 2. Check general endpoint creation / testing claims
-                    # Extract the subject/feature before "endpoint(s)"
                     m_feature = re.search(
                         r"(\b\w+\b)\s+(?:creation\s+|api\s+)?endpoints?",
                         clean_b,
@@ -366,7 +344,6 @@ class StatusValidator:
                     )
                     feature_keyword = m_feature.group(1).lower() if m_feature else ""
 
-                    # Check if there are API view/url/serializer files for this specific feature
                     has_feature_api = False
                     if feature_keyword and feature_keyword not in (
                         "new",
@@ -405,8 +382,7 @@ class StatusValidator:
                         )
                         continue
 
-            # Check 3: Semantic grounding / evidence check
-            # Extract distinctive alphanumeric words (length >= 4) not in stopwords
+            # Check 3: Semantic grounding — tokens must appear in commit corpus or changed files
             tokens = {
                 w.lower()
                 for w in re.findall(r"\b[A-Za-z][A-Za-z0-9_]{3,}\b", clean_b)
@@ -414,7 +390,6 @@ class StatusValidator:
             }
 
             if tokens:
-                # Count how many tokens are supported by commits, files, or comments
                 supported_tokens = {
                     t
                     for t in tokens
@@ -422,7 +397,7 @@ class StatusValidator:
                 }
                 support_ratio = len(supported_tokens) / len(tokens)
 
-                # If support ratio is extremely low (< 20%) and multiple tokens exist
+                # Drop bullets where fewer than 20% of distinctive terms are grounded
                 if len(tokens) >= 4 and support_ratio < 0.20:
                     unsupported = tokens - supported_tokens
                     reason = (
@@ -440,11 +415,10 @@ class StatusValidator:
                     )
                     continue
 
-            # Passed all checks
             result.total_passed += 1
             validated_bullets.append(bullet)
 
-        # Fallback handling: If all bullets were filtered out or only the foreign header remains
+        # If all bullets were filtered, fall back to the top author commit headline
         non_header_bullets = [
             b
             for b in validated_bullets
@@ -453,7 +427,6 @@ class StatusValidator:
 
         if not non_header_bullets:
             if author_commits:
-                # Construct grounded fallback bullet from the most significant author commit headline
                 fallback_text = clean_commit_message(author_commits[0].headline)
                 if fallback_text:
                     if is_foreign:
@@ -475,7 +448,6 @@ class StatusValidator:
         activity: ProjectActivity,
         result: ValidationResult,
     ) -> None:
-        """Validate review bullets against actual review comments."""
         if not review.review_bullets:
             return
 

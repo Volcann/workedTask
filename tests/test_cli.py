@@ -1,5 +1,3 @@
-"""Tests for CLI arguments, subcommands, output files, and execution paths."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -149,7 +147,6 @@ def test_cli_clean_reports_dry_run(tmp_path: Path) -> None:
 
 
 def test_cli_validation_flag(tmp_path: Path) -> None:
-    """CLI runs validation pipeline with --validate and can disable with --no-validate."""
     out_file = tmp_path / "val_out.txt"
     code = main(["--demo", "1", "--output", str(out_file), "--validate", "--sleep", "0.0"])
     assert code == 0

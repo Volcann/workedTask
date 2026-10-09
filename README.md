@@ -5,7 +5,119 @@
 [![Tested with: pytest](https://img.shields.io/badge/tested%20with-pytest-blue.svg)](https://docs.pytest.org/)
 [![Tooling: uv](https://img.shields.io/badge/tooling-uv-purple.svg)](https://github.com/astral-sh/uv)
 
-An enterprise-grade Python CLI tool that automates compiling daily engineering status updates directly from GitHub. It queries commits, pull requests, reviews, foreign contributions, and branch activities for any target date, groups them by project and domain (`Backend PR`, `Frontend PR`, `Reviewed PRs`), formats them into clean executive bullet points, and exports the final report directly to a separate `.txt` file.
+**Automated daily engineering status reporter — powered by GitHub + Gemini AI.**
+_One command. Every commit, PR, and review, compiled into a clean daily report._
+
+[Quick Start](#-quickstart--installation) · [The Problem](#the-problem) · [What It Does](#what-it-does) · [Key Features](#-key-features) · [Output Examples](#-output-report-format-examples) · [Architecture](#-repository-structure)
+
+---
+
+## The Problem
+
+At the end of every workday, engineers face the same quiet tax:
+
+> _"What exactly did I work on today? Which PRs? Which commits? Was that review in the morning or yesterday?"_
+
+Without tooling, collecting this information manually looks like this:
+
+```text
+Engineer
+   │
+   ├── Open GitHub → search commits by date
+   ├── Open GitHub → scroll through PR list
+   ├── Open GitHub → check review history
+   ├── Open GitHub → look up branch activity
+   ├── Reconstruct which PRs belong to which project
+   ├── Figure out which commits are yours vs. a teammate's
+   ├── Write the update in the right format
+   └── Paste it somewhere before forgetting half of it
+```
+
+That process takes **10 to 20 minutes every single day** — often longer when PRs span multiple repos, or contributions were made to a teammate's branch.
+
+Over a week, that's over an hour of engineering time spent on administration instead of engineering.
+
+### Why the manual approach breaks down
+
+**GitHub's interface is not built for daily status reporting.**
+
+Searching commits by author and date across multiple repositories is tedious. The PR list mixes open, merged, and reviewed work without a clean daily boundary. Foreign contributions — commits you authored inside someone else's PR — are invisible unless you dig through PR timelines manually.
+
+**Copy-pasting from GitHub produces inconsistent reports.**
+
+Different engineers format updates differently. Some include ticket numbers, some don't. Some list commit messages, others write summaries from memory. The result is a collection of status updates that are hard to read and impossible to audit.
+
+**The cognitive cost compounds.**
+
+By end of day, the context for morning commits has already started to fade. Reconstructing what you did, why, and in which PR — accurately — takes real effort.
+
+> **The problem isn't that engineers don't want to write status updates. The problem is that collecting the raw data to write them is slow, fragmented, and repetitive.**
+
+---
+
+## The Daily Time Problem
+
+This is the core reason this tool exists.
+
+Without automation, every working day ends the same way:
+
+```text
+Engineer
+   │
+   ├── Tab 1: GitHub commits filtered by date and author
+   ├── Tab 2: GitHub PRs created today
+   ├── Tab 3: GitHub reviews submitted today
+   ├── Tab 4: Check branch for standalone commits
+   ├── Tab 5: Cross-reference which repo belongs to which project
+   └── Write it all up from memory
+```
+
+With this tool:
+
+```text
+Engineer
+   │
+   └── status-reporter --date today
+              │
+              ▼
+         GitHub API
+              │
+        ┌─────┼─────┐
+        ▼     ▼     ▼
+      PRs  Reviews  Branches
+        │     │     │
+        └─────┼─────┘
+              ▼
+       Formatted Report
+              │
+        ┌─────┴─────┐
+        ▼           ▼
+    Terminal     .txt file
+```
+
+**15 minutes saved. Every day.**
+
+That is over an hour a week returned to actual engineering work.
+
+---
+
+## What It Does
+
+This CLI queries GitHub directly for a given date and compiles everything into a formatted status report.
+
+It:
+
+1. Fetches all commits authored by the configured contributor on that date.
+2. Identifies which commits belong to your own PRs and which were contributed to a teammate's PR.
+3. Scans reviewed PRs from that day.
+4. Detects standalone branch commits not yet tied to a PR.
+5. Groups everything by project and domain (Backend / Frontend).
+6. Formats it into clean, structured bullet points.
+7. Prints the report to the terminal and saves it to a `.txt` file automatically.
+
+The engineer doesn't have to open GitHub at all.
+
+They just run one command.
 
 ---
 
@@ -276,3 +388,15 @@ workedTask/
     ├── test_date_utils.py     # Multi-format date parsing and text cleaning tests
     ├── test_formatter.py      # Formatting fidelity tests for Examples 1, 2, and 3
 ```
+
+---
+
+## The Idea in One Sentence
+
+> **This tool turns a 15-minute daily ritual of manually hunting GitHub for your own activity into a single command — giving engineers back over an hour every week to spend on actual engineering.**
+
+---
+
+## License
+
+MIT. Built for engineers who are tired of spending end-of-day energy on log collection instead of shipping.

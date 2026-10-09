@@ -1,5 +1,3 @@
-"""Utility functions for date parsing, text formatting, and ticket extraction."""
-
 from __future__ import annotations
 
 import re
@@ -9,20 +7,6 @@ from typing import Sequence
 
 
 def parse_target_date(raw_date: str | date | datetime | None = None) -> date:
-    """Parse various date formats into a standard datetime.date object.
-
-    Supported formats:
-    - None or 'today': current date
-    - 'yesterday': previous day
-    - '11-SEP-2026', '16-Sep-2026', '22-sep-2026'
-    - '2026-09-11' (ISO)
-    - '2026/09/11'
-    - '11-09-2026', '11/09/2026'
-    - 'Sep 11 2026', 'September 11, 2026'
-
-    Raises:
-        ValueError: If raw_date cannot be recognized as a valid date.
-    """
     if raw_date is None:
         return date.today()
 
@@ -59,7 +43,7 @@ def parse_target_date(raw_date: str | date | datetime | None = None) -> date:
         except ValueError:
             pass
 
-    # Try normalizing hyphenated uppercase like 11-SEP-2026
+    # Retry with original casing for hyphenated formats like 11-SEP-2026
     for fmt in ("%d-%b-%Y", "%d-%B-%Y"):
         try:
             return datetime.strptime(raw_date.strip(), fmt).date()
@@ -73,17 +57,14 @@ def parse_target_date(raw_date: str | date | datetime | None = None) -> date:
 
 
 def format_status_date(dt: date) -> str:
-    """Format a date object into the canonical report date format: '11-SEP-2026'."""
     return dt.strftime("%d-%b-%Y").upper()
 
 
 def format_iso_date(dt: date) -> str:
-    """Format date into standard ISO string: 'YYYY-MM-DD'."""
     return dt.strftime("%Y-%m-%d")
 
 
 def extract_ticket_prefix(text: str) -> str | None:
-    """Extract ticket prefix like HMT-258 or HTM-228 or MB-228 from a text string."""
     match = re.search(r"\b([A-Z]{2,10}-\d+)\b", text)
     if match:
         return match.group(1)
@@ -91,18 +72,15 @@ def extract_ticket_prefix(text: str) -> str | None:
 
 
 def clean_commit_message(msg: str) -> str:
-    """Clean and return the primary headline of a commit message."""
     if not msg:
         return ""
     lines = [line.strip() for line in msg.strip().splitlines() if line.strip()]
     if not lines:
         return ""
-    headline = lines[0]
-    return headline
+    return lines[0]
 
 
 def is_merge_commit(msg: str) -> bool:
-    """Check if the commit is an automated merge commit."""
     lower = msg.lower()
     return (
         lower.startswith("merge pull request")
@@ -112,7 +90,6 @@ def is_merge_commit(msg: str) -> bool:
 
 
 def clean_markdown_bullets(text: str) -> list[str]:
-    """Extract bullet points from a markdown text block."""
     bullets: list[str] = []
     if not text:
         return bullets
@@ -121,9 +98,8 @@ def clean_markdown_bullets(text: str) -> list[str]:
         line = raw_line.strip()
         if not line:
             continue
-        # Remove markdown checkbox markers like [ ] or [x]
+        # Normalize checkbox markers like [ ] or [x] into plain bullets
         line = re.sub(r"^[-*]\s*\[[ xX]\]\s*", "- ", line)
-        # Bullet patterns
         if line.startswith(("- ", "* ", "• ", "-> ")):
             cleaned = re.sub(r"^(?:->|[-*•])\s*", "", line).strip()
             if cleaned:
@@ -132,7 +108,6 @@ def clean_markdown_bullets(text: str) -> list[str]:
 
 
 def format_arrow_lines(lines: Sequence[str]) -> list[str]:
-    """Prefix non-empty lines with '-> '."""
     formatted = []
     for line in lines:
         stripped = line.strip()
@@ -153,18 +128,6 @@ def clean_reports_directory(
     remove_all: bool = False,
     dry_run: bool = False,
 ) -> tuple[list[Path], list[Path]]:
-    """Remove report files that are no longer in use.
-
-    Args:
-        reports_dir: Directory containing report .txt files.
-        keep: Specific date or 'latest' to keep. If None and remove_all is False,
-              defaults to keeping the most recently modified report file.
-        remove_all: If True, remove all .txt reports regardless of keep setting.
-        dry_run: If True, do not actually delete files.
-
-    Returns:
-        tuple of (deleted_files, kept_files)
-    """
     dir_path = Path(reports_dir)
     if not dir_path.exists():
         return [], []
@@ -197,7 +160,7 @@ def clean_reports_directory(
                 if not to_keep:
                     to_keep = [p for p in all_txt if keep_clean.lower() in p.name.lower()]
         else:
-            # Default: keep the most recently modified report (active report in use)
+            # Default: keep only the most recently modified report
             latest_file = max(all_txt, key=lambda p: p.stat().st_mtime)
             to_keep = [latest_file]
 

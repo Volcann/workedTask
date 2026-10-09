@@ -1,4 +1,4 @@
-"""Enable python -m status_reporter execution."""
+from __future__ import annotations
 
 import sys
 

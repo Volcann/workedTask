@@ -1,5 +1,3 @@
-"""AI Enhancer for generating authentic, human-written PR summaries using Gemini Free API."""
-
 from __future__ import annotations
 
 import hashlib
@@ -21,13 +19,12 @@ from shared.utils import format_arrow_lines
 warnings.filterwarnings("ignore", category=UserWarning)
 logging.getLogger("google.genai").setLevel(logging.ERROR)
 
-# Load environment variables
 load_dotenv()
 load_dotenv("/home/folium/Documents/volcanai/.env")
 
 logger = logging.getLogger(__name__)
 
-# Free-tier optimized models in order of quota resilience (verified models only)
+# Free-tier models in descending quota resilience order (verified only)
 DEFAULT_FREE_MODELS = [
     "gemini-2.5-flash-lite",
     "gemini-flash-lite-latest",
@@ -37,16 +34,14 @@ DEFAULT_FREE_MODELS = [
     "gemini-1.5-flash",
 ]
 
-DEFAULT_MIN_REQUEST_INTERVAL = 5.0  # Free tier allows 15 RPM (1 request per ~4-5s) to protect quota
-DEFAULT_RETRY_DELAY = 6.0  # Delay before trying next fallback on 429
-MAX_MODELS_PER_ITEM = 3  # Minimize quota burn by trying at most 3 models per item
+DEFAULT_MIN_REQUEST_INTERVAL = 5.0  # Free tier: 15 RPM → ~1 request per 4-5s
+DEFAULT_RETRY_DELAY = 6.0  # Wait before trying next fallback on 429
+MAX_MODELS_PER_ITEM = 3  # Cap quota burn at 3 models per item
 
 CACHE_FILE = Path(".cache/gemini_summary_cache.json")
 
 
 class AIEnhancer:
-    """Enhance PR activity and commit descriptions into authentic human-written status reports."""
-
     def __init__(
         self,
         api_key: str | None = None,
@@ -83,7 +78,6 @@ class AIEnhancer:
         return self._client
 
     def _wait_for_rate_limit(self) -> None:
-        """Enforce pacing between API requests to protect Gemini Free Tier quota (15 RPM)."""
         if os.getenv("PYTEST_CURRENT_TEST"):
             return
         if self._last_request_time <= 0:
@@ -129,8 +123,7 @@ class AIEnhancer:
         shas = "_".join(c.short_sha for c in commits)
         comments_str = "_".join(sorted(comments or []))
         comments_suffix = f":{comments_str}" if comments_str else ""
-        # Version the cache key so summaries generated before attribution
-        # safeguards are not reused.
+        # Version prefix prevents reuse of summaries generated before attribution safeguards
         raw = f"attribution-v2:{pr.project_name}:{pr.repo_name}#{pr.number}:{pr.title}:{is_foreign}:{shas}{comments_suffix}"
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -141,15 +134,10 @@ class AIEnhancer:
         is_foreign: bool = False,
         comments: Sequence[str] | None = None,
     ) -> list[str]:
-        """Generate human-written, engineer-grounded status bullets using Gemini Free API.
-
-        Handles free-tier rate limits (HTTP 429) automatically with model failover.
-        """
         client = self._get_client()
         if not client:
             return []
 
-        # Check local cache to conserve free tier quota
         cache_key = self._compute_cache_key(pr, author_commits, is_foreign, comments=comments)
         if cache_key in self._cache:
             print(f"      ⚡ PR#{pr.number}: Loaded human summary from cache", file=sys.stderr)
@@ -233,12 +221,10 @@ class AIEnhancer:
                         for line in response.text.strip().splitlines()
                         if line.strip() and not line.strip().startswith("```")
                     ]
-                    # Ensure each line starts with -> for human-standard formatting
                     cleaned_bullets = format_arrow_lines(raw_lines)
-                    # Strip leading arrow internally so formatter controls prefixing consistently
+                    # Strip leading arrow so the formatter controls prefixing consistently
                     processed_bullets = [re.sub(r"^->\s*", "", b).strip() for b in cleaned_bullets]
 
-                    # Enforce canonical first line for foreign PR contributions
                     if is_foreign:
                         canonical_header = (
                             f"PR#{pr.number} -> Contributed authored commit(s) to this PR."
@@ -248,17 +234,14 @@ class AIEnhancer:
                         else:
                             processed_bullets[0] = canonical_header
 
-                    # Cache the result to protect free tier quota
                     self._cache[cache_key] = processed_bullets
                     self._save_cache()
-
                     self._last_request_time = time.time()
                     return processed_bullets
             except Exception as e:
                 err_msg = str(e)
                 logger.debug("Model %s failed: %s", model_name, err_msg)
 
-                # Check if rate limited (429 / RESOURCE_EXHAUSTED)
                 if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
                     print(
                         f"      ⏳ Rate limit (429) on {model_name}. Pausing {self.retry_delay:.0f}s before trying next fallback...",
@@ -268,7 +251,6 @@ class AIEnhancer:
                         time.sleep(self.retry_delay)
                     self._last_request_time = time.time()
                     continue
-                # If model not found (404), try next model
                 if "404" in err_msg or "NOT_FOUND" in err_msg:
                     continue
 
@@ -288,10 +270,6 @@ class AIEnhancer:
         review: ReviewInfo,
         comments: Sequence[str],
     ) -> list[str]:
-        """Summarize PR review findings, focusing on severe issues, edge cases, and test validations.
-
-        Handles free-tier rate limits (HTTP 429) automatically with model failover.
-        """
         if not comments:
             return []
 

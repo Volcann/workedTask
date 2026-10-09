@@ -1,5 +1,3 @@
-"""Tests for ActivityCollector verifying orchestration of PRs, commits, reviews, and branches."""
-
 from __future__ import annotations
 
 from datetime import date

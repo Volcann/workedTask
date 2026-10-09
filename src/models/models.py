@@ -1,5 +1,3 @@
-"""Data models for GitHub commits, pull requests, reviews, and status reports."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -10,8 +8,6 @@ from ghtoolkit.models import CommitInfo, PullRequestInfo, ReviewInfo
 
 @dataclass
 class BranchActivity:
-    """Commits pushed directly to a branch not yet merged into a PR."""
-
     branch_name: str
     commits: list[CommitInfo] = field(default_factory=list)
     project_name: str = "HR-Tool"
@@ -20,8 +16,6 @@ class BranchActivity:
 
 @dataclass
 class ProjectActivity:
-    """Aggregated daily activities for a single repository or category."""
-
     project_name: str
     category: str
     owner: str
@@ -45,8 +39,6 @@ class ProjectActivity:
 
 @dataclass
 class RemovedItem:
-    """Record of a bullet or claim removed by the validation pipeline."""
-
     target: str
     project: str
     bullet: str
@@ -56,8 +48,6 @@ class RemovedItem:
 
 @dataclass
 class DailyReport:
-    """Complete aggregated daily report across all projects and categories."""
-
     target_date: date
     date_display: str
     projects: list[ProjectActivity] = field(default_factory=list)

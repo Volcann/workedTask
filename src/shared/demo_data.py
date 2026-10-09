@@ -1,5 +1,3 @@
-"""Mock and demo dataset generator reproducing user sample reports."""
-
 from __future__ import annotations
 
 from datetime import date
@@ -13,7 +11,6 @@ from models.models import (
 
 
 def get_demo_report_1() -> DailyReport:
-    """Recreates EXAMPLE 1 (11-SEP-2026)."""
     target_date = date(2026, 9, 11)
 
     backend_act = ProjectActivity(
@@ -79,7 +76,6 @@ def get_demo_report_1() -> DailyReport:
 
 
 def get_demo_report_2() -> DailyReport:
-    """Recreates EXAMPLE 2 (16-SEP-2026)."""
     target_date = date(2026, 9, 16)
 
     act = ProjectActivity(
@@ -146,7 +142,6 @@ def get_demo_report_2() -> DailyReport:
 
 
 def get_demo_report_3() -> DailyReport:
-    """Recreates EXAMPLE 3 (22-SEP-2026)."""
     target_date = date(2026, 9, 22)
 
     act = ProjectActivity(

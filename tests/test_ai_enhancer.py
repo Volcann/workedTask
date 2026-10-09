@@ -1,11 +1,9 @@
-"""Tests for AIEnhancer utilizing Gemini Free API and fallback resilience."""
-
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from processing.ai_enhancer import DEFAULT_FREE_MODELS, AIEnhancer
 from models.models import CommitInfo, PullRequestInfo, ReviewInfo
+from processing.ai_enhancer import DEFAULT_FREE_MODELS, AIEnhancer
 
 
 def test_ai_enhancer_initialization() -> None:

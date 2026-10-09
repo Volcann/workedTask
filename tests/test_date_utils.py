@@ -1,5 +1,3 @@
-"""Tests for date parsing, ticket extraction, and text manipulation utilities."""
-
 from __future__ import annotations
 
 from datetime import date, timedelta

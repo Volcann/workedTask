@@ -1,5 +1,3 @@
-"""Tests for dynamic project configuration operations in projects.json."""
-
 from __future__ import annotations
 
 import json

@@ -1,5 +1,3 @@
-"""Command Line Interface for GitHub Daily Status Reporter."""
-
 from __future__ import annotations
 
 import argparse
@@ -9,7 +7,6 @@ from pathlib import Path
 
 from ghtoolkit import GitHubClient
 
-from processing.ai_enhancer import AIEnhancer
 from collection.collector import ActivityCollector
 from config.loader import (
     add_project,
@@ -18,17 +15,17 @@ from config.loader import (
     remove_project,
     resolve_config_path,
 )
+from presentation.formatter import StatusReportFormatter
+from processing.ai_enhancer import AIEnhancer
 from shared.demo_data import (
     get_demo_report_1,
     get_demo_report_2,
     get_demo_report_3,
 )
-from presentation.formatter import StatusReportFormatter
 from shared.utils import parse_target_date
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build the CLI argument parser."""
     parser = argparse.ArgumentParser(
         prog="status-reporter",
         description="Daily GitHub Commit, PR, Review & Contribution Status Reporter",
@@ -36,17 +33,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="subcommand", help="Subcommand to execute")
 
-    # --- Subcommand: projects ---
+    # --- projects subcommand ---
     proj_parser = subparsers.add_parser(
         "projects", help="Manage dynamic project configurations in projects.json"
     )
     proj_sub = proj_parser.add_subparsers(dest="projects_action", help="Action to perform")
 
-    # projects list
     list_p = proj_sub.add_parser("list", help="List all configured projects")
     list_p.add_argument("-c", "--config", type=str, help="Path to projects.json")
 
-    # projects add
     add_p = proj_sub.add_parser("add", help="Add or update a project in projects.json")
     add_p.add_argument("--name", required=True, help="Project group name (e.g. HR-Tool)")
     add_p.add_argument("--owner", required=True, help="GitHub repository owner / org")
@@ -57,13 +52,12 @@ def build_parser() -> argparse.ArgumentParser:
     add_p.add_argument("--author", default=None, help="Contributor username (default: Volcann)")
     add_p.add_argument("-c", "--config", type=str, help="Path to projects.json")
 
-    # projects remove
     rem_p = proj_sub.add_parser("remove", help="Remove a project from projects.json")
     rem_p.add_argument("--owner", required=True, help="GitHub repository owner / org")
     rem_p.add_argument("--repo", required=True, help="GitHub repository name")
     rem_p.add_argument("-c", "--config", type=str, help="Path to projects.json")
 
-    # --- Subcommand: clean-reports ---
+    # --- clean-reports subcommand ---
     clean_p = subparsers.add_parser(
         "clean-reports",
         help="Remove unused, old, or all generated reports from reports/",
@@ -95,7 +89,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Preview files that would be removed without deleting them",
     )
 
-    # --- Root arguments for report generation ---
+    # --- root arguments for report generation ---
     parser.add_argument(
         "-d",
         "--date",
@@ -205,7 +199,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def handle_projects_command(args: argparse.Namespace) -> int:
-    """Handle project configuration subcommands."""
     action = getattr(args, "projects_action", "list")
     config_path = getattr(args, "config", None)
 
@@ -248,7 +241,6 @@ def handle_projects_command(args: argparse.Namespace) -> int:
 
 
 def handle_clean_reports_command(args: argparse.Namespace) -> int:
-    """Handle clean-reports subcommand."""
     from shared.utils import clean_reports_directory
 
     reports_dir = getattr(args, "reports_dir", "reports")
@@ -284,7 +276,6 @@ def handle_clean_reports_command(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Main CLI entrypoint."""
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -294,7 +285,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.subcommand == "clean-reports":
         return handle_clean_reports_command(args)
 
-    # 1. Parse target date
     try:
         target_date = parse_target_date(args.date)
     except ValueError as e:
@@ -303,7 +293,6 @@ def main(argv: list[str] | None = None) -> int:
 
     formatter = StatusReportFormatter()
 
-    # 2. Check for demo mode
     if args.demo:
         if args.demo == 1:
             report = get_demo_report_1()
@@ -312,7 +301,6 @@ def main(argv: list[str] | None = None) -> int:
         else:
             report = get_demo_report_3()
     else:
-        # Load and filter projects
         projects = load_projects(args.config)
         if args.author:
             for p in projects:
@@ -352,7 +340,6 @@ def main(argv: list[str] | None = None) -> int:
         )
         report = collector.collect_for_date(filtered, target_date)
 
-    # 2.5. Pass through Validation Pipeline
     val_result = None
     if getattr(args, "validate", True):
         from config.validator import StatusValidator
@@ -365,17 +352,12 @@ def main(argv: list[str] | None = None) -> int:
         if val_result.has_removals:
             print("\n" + val_result.format_summary() + "\n", file=sys.stderr)
 
-    # 3. Format report
     rendered_output = formatter.format_report(report)
-
-    # 4. Print report to stdout
     print("\n" + rendered_output)
 
-    # 5. Determine and write to separate .txt file
     if args.output:
         out_file = Path(args.output)
     else:
-        # Default report file
         safe_date_str = report.date_display.replace("-", "_")
         reports_dir = Path("reports")
         reports_dir.mkdir(parents=True, exist_ok=True)

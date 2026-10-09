@@ -25,6 +25,11 @@ jobs:
       - name: Move ghToolkit to sibling directory
         run: mv _ghToolkit ../ghToolkit
 
+      - name: Patch absolute path for dependencies
+        run: |
+          sed -i "s|ghtoolkit @ .*ghToolkit|ghtoolkit @ file://${GITHUB_WORKSPACE}/../ghToolkit|g" pyproject.toml
+          sed -i "s|\"../ghToolkit\"|\"${GITHUB_WORKSPACE}/../ghToolkit\"|g" uv.lock || true
+
       - name: Install uv
         uses: astral-sh/setup-uv@v3
         with:

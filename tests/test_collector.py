@@ -11,21 +11,20 @@ from collection.collector import ActivityCollector
 def test_collector_own_prs(sample_date: date) -> None:
     client_mock = MagicMock()
     # Mock own PR
+    own_commit = CommitInfo(
+        sha="abc348",
+        message="Added search and natural sorting to device-user listings.",
+        author_login="Volcann",
+    )
     own_pr = PullRequestInfo(
         number=348,
         title="HMT-258 | Add search and natural sorting to device mappings",
         body="Added search and natural sorting to device-user listings.",
         author_login="Volcann",
-        commits=[
-            CommitInfo(
-                sha="abc348",
-                message="Added search and natural sorting to device-user listings.",
-                author_login="Volcann",
-            )
-        ],
+        commits=[own_commit],
     )
     client_mock.get_user_prs_for_date.return_value = [own_pr]
-    client_mock.get_user_commits_for_date.return_value = []
+    client_mock.get_user_commits_for_date.return_value = [own_commit]
     client_mock.get_user_reviewed_prs_for_date.return_value = []
 
     collector = ActivityCollector(github_client=client_mock, use_ai=False)
@@ -265,6 +264,50 @@ def test_collector_pr_comments_included_in_bullets(sample_date: date) -> None:
     assert any("Tested the command and boundary conditions." in b for b in own_pr.bullets)
 
 
+def test_collector_discards_unfiltered_pr_comment_objects(sample_date: date) -> None:
+    client_mock = MagicMock()
+    commit = CommitInfo(
+        sha="today123", message="Update performance results", author_login="Volcann"
+    )
+    pr = PullRequestInfo(
+        number=459,
+        title="HTM-341: Optimize inbox request lists",
+        author_login="Volcann",
+        commits=[commit],
+        comments=[{"body": "Teammate comment from a different day"}],
+    )
+    review = ReviewInfo(
+        pr_number=451,
+        pr_title="HTM-341: Preserve performance cycle definitions",
+        reviewer="Volcann",
+        state="COMMENTED",
+        comments=[{"body": "Unfiltered review comment"}],
+    )
+    client_mock.get_user_prs_for_date.return_value = [pr]
+    client_mock.get_user_commits_for_date.return_value = [commit]
+    client_mock.get_user_reviewed_prs_for_date.return_value = [review]
+    client_mock.get_pr_user_comments.return_value = []
+    ai_enhancer = MagicMock()
+    ai_enhancer.is_available = True
+    ai_enhancer.summarize_pr.return_value = ["PR#459 -> Updated performance results"]
+
+    collector = ActivityCollector(github_client=client_mock, ai_enhancer=ai_enhancer)
+    project = ProjectConfig(
+        name="HR-Tool",
+        category="Backend",
+        owner="folium-hr-management-tool",
+        repo="hr-tool-backend",
+        author="Volcann",
+    )
+
+    report = collector.collect_for_date([project], sample_date)
+
+    assert report.projects[0].own_prs[0].comments == []
+    assert report.projects[0].reviewed_prs[0].comments == []
+    assert ai_enhancer.summarize_pr.call_args.kwargs["comments"] == []
+    ai_enhancer.summarize_review.assert_not_called()
+
+
 def test_collector_does_not_attribute_teammate_commits_in_own_pr(sample_date: date) -> None:
     client_mock = MagicMock()
     own_commit = CommitInfo(
@@ -285,7 +328,7 @@ def test_collector_does_not_attribute_teammate_commits_in_own_pr(sample_date: da
         commits=[teammate_commit, own_commit],
     )
     client_mock.get_user_prs_for_date.return_value = [pr]
-    client_mock.get_user_commits_for_date.return_value = []
+    client_mock.get_user_commits_for_date.return_value = [own_commit]
     client_mock.get_user_reviewed_prs_for_date.return_value = []
 
     collector = ActivityCollector(github_client=client_mock, use_ai=False, verbose=False)
@@ -338,3 +381,77 @@ def test_collector_does_not_use_pr_body_without_authored_commits(sample_date: da
 
     assert bullets == ["PR#396 -> Opened this PR; no authored commit details were found."]
     assert all("claim filtering" not in bullet for bullet in bullets)
+
+
+def test_merged_pr_omits_prior_day_commit_summary(sample_date: date) -> None:
+    client_mock = MagicMock()
+    old_commit = CommitInfo(
+        sha="9bfcd4bae3752c55acf27a41965e8b057ccf5c4e",
+        message="Add performance notification tests",
+        author_login="Volcann",
+        date="2026-10-15T19:57:04+05:00",
+    )
+    pr = PullRequestInfo(
+        number=448,
+        title="HTM-341: Performance issues & enh",
+        author_login="Volcann",
+        state="MERGED",
+        commits=[old_commit],
+    )
+    client_mock.get_user_prs_for_date.return_value = [pr]
+    client_mock.get_user_commits_for_date.return_value = []
+    client_mock.get_user_reviewed_prs_for_date.return_value = [
+        ReviewInfo(pr_number=448, pr_title=pr.title, reviewer="Volcann", state="APPROVED")
+    ]
+
+    collector = ActivityCollector(github_client=client_mock, use_ai=False, verbose=False)
+    project = ProjectConfig(
+        name="HR-Tool",
+        category="Backend",
+        owner="folium-hr-management-tool",
+        repo="hr-tool-backend",
+        author="Volcann",
+    )
+
+    report = collector.collect_for_date([project], sample_date)
+    activity = report.projects[0]
+    assert activity.own_prs == []
+    assert [review.pr_number for review in activity.reviewed_prs] == [448]
+
+
+def test_merged_pr_summarizes_only_target_day_commits(sample_date: date) -> None:
+    client_mock = MagicMock()
+    old_commit = CommitInfo(
+        sha="old1234",
+        message="Add notification tests yesterday",
+        author_login="Volcann",
+    )
+    today_commit = CommitInfo(
+        sha="new1234",
+        message="Fix notification settings today",
+        author_login="Volcann",
+    )
+    pr = PullRequestInfo(
+        number=448,
+        title="HTM-341: Performance issues & enh",
+        author_login="Volcann",
+        state="MERGED",
+        commits=[old_commit, today_commit],
+    )
+    client_mock.get_user_prs_for_date.return_value = [pr]
+    client_mock.get_user_commits_for_date.return_value = [today_commit]
+    client_mock.get_user_reviewed_prs_for_date.return_value = []
+
+    collector = ActivityCollector(github_client=client_mock, use_ai=False, verbose=False)
+    project = ProjectConfig(
+        name="HR-Tool",
+        category="Backend",
+        owner="folium-hr-management-tool",
+        repo="hr-tool-backend",
+        author="Volcann",
+    )
+
+    report = collector.collect_for_date([project], sample_date)
+    collected_pr = report.projects[0].own_prs[0]
+    assert [commit.sha for commit in collected_pr.author_commits] == ["new1234"]
+    assert all("yesterday" not in bullet for bullet in collected_pr.bullets)

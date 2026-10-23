@@ -169,9 +169,21 @@ class AIEnhancer:
         files_section = ""
         all_files: set[str] = set()
         for c in author_commits:
-            all_files.update(c.files)
-        if pr.files_changed:
-            all_files.update(pr.files_changed)
+            for f in c.files:
+                if isinstance(f, str) and f.strip():
+                    all_files.add(f.strip())
+                elif isinstance(f, dict):
+                    fname = f.get("filename") or f.get("path") or f.get("name")
+                    if isinstance(fname, str) and fname.strip():
+                        all_files.add(fname.strip())
+
+        for f in pr.files_changed:
+            if isinstance(f, str) and f.strip():
+                all_files.add(f.strip())
+            elif isinstance(f, dict):
+                fname = f.get("filename") or f.get("path") or f.get("name")
+                if isinstance(fname, str) and fname.strip():
+                    all_files.add(fname.strip())
         if all_files:
             file_sample = sorted(all_files)[:20]
             files_section = (

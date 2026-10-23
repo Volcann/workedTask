@@ -226,3 +226,58 @@ def test_validator_format_summary() -> None:
     assert "Excluded 1 misleading or low-validation claim(s):" in summary
     assert "PR#393" in summary
     assert "Endpoint does not exist" in summary
+
+
+def test_validator_handles_dict_files_changed() -> None:
+    pr = PullRequestInfo(
+        number=382,
+        title="HMT-215: FE | Push Notifications",
+        author_login="Volcann",
+        commits=[
+            CommitInfo(
+                sha="6ecba796cf95d0e11dee12b998c6f17a3104a35a",
+                message="HMT-215: complete notification preferences and delivery",
+                author_name="Volcann",
+                files=[
+                    {"filename": "apps/employee/src/views/notifications.tsx", "status": "modified"},
+                ],  # type: ignore
+            ),
+        ],
+        author_commits=[
+            CommitInfo(
+                sha="6ecba796cf95d0e11dee12b998c6f17a3104a35a",
+                message="HMT-215: complete notification preferences and delivery",
+                author_name="Volcann",
+                files=[
+                    {"filename": "apps/employee/src/views/notifications.tsx", "status": "modified"},
+                ],  # type: ignore
+            ),
+        ],
+        files_changed=[
+            {"filename": "apps/employee/.env.example", "status": "added"},
+            {"path": "apps/employee/src/api/client.ts"},
+        ],  # type: ignore
+        bullets=[
+            "PR#382 -> Complete notification preferences and delivery.",
+        ],
+        category="Frontend",
+        project_name="HR-Tool",
+    )
+
+    activity = ProjectActivity(
+        project_name="HR-Tool",
+        category="Frontend",
+        owner="folium-hr-management-tool",
+        repo="hr-tool-frontend",
+        own_prs=[pr],
+    )
+    report = DailyReport(
+        target_date=date(2026, 10, 14),
+        date_display="14-OCT-2026",
+        projects=[activity],
+    )
+
+    validator = StatusValidator(verbose=False)
+    result = validator.validate_report(report)
+    assert not result.has_removals
+    assert len(pr.bullets) == 1

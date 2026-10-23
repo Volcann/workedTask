@@ -254,8 +254,21 @@ class StatusValidator:
 
         changed_files: set[str] = set()
         for c in author_commits:
-            changed_files.update(c.files)
-        changed_files.update(pr.files_changed)
+            for f in c.files:
+                if isinstance(f, str) and f.strip():
+                    changed_files.add(f.strip())
+                elif isinstance(f, dict):
+                    fname = f.get("filename") or f.get("path") or f.get("name")
+                    if isinstance(fname, str) and fname.strip():
+                        changed_files.add(fname.strip())
+
+        for f in pr.files_changed:
+            if isinstance(f, str) and f.strip():
+                changed_files.add(f.strip())
+            elif isinstance(f, dict):
+                fname = f.get("filename") or f.get("path") or f.get("name")
+                if isinstance(fname, str) and fname.strip():
+                    changed_files.add(fname.strip())
 
         commit_corpus = " ".join(f"{c.headline} {c.body}" for c in author_commits).lower()
         pr_corpus = f"{pr.title} {pr.body} {' '.join(pr.comments)} {commit_corpus}".lower()

@@ -12,6 +12,10 @@ dependencies = ["ghtoolkit>=0.2.0,<0.3.0", "tzdata>=2024.1"]
 
 [project.optional-dependencies]
 ai = ["google-genai>=1,<2"]
+dev = [
+    "pytest>=8.0.0",
+    "ruff==0.17.2",
+]
 
 [project.scripts]
 worked-task = "cli.commands:main"
@@ -23,3 +27,7 @@ include = ["ai*", "cli*", "extractors*", "report*", "utils*", "validator*", "con
 
 [tool.uv.sources]
 ghtoolkit = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "src"]

@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from ghtoolkit import ProjectConfig
-
 from src.extractors.daily_activity_extractor import DailyActivityExtractor
 
 

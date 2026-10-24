@@ -5,7 +5,6 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
-
 from src.extractors.daily_activity_extractor import DailyActivityExtractor, main
 
 
@@ -19,13 +18,15 @@ def test_cli_execution_with_explicit_date_argument(
         "issues_data": [],
     }
 
-    with patch.object(
-        DailyActivityExtractor,
-        "extract",
-        return_value=expected_payload,
+    with (
+        patch.object(
+            DailyActivityExtractor,
+            "extract",
+            return_value=expected_payload,
+        ),
+        patch("sys.argv", ["daily_activity_extractor", "2026-10-21"]),
     ):
-        with patch("sys.argv", ["daily_activity_extractor", "2026-10-21"]):
-            exit_code = main()
+        exit_code = main()
 
     captured_output = capsys.readouterr().out
     deserialized_data = json.loads(captured_output)
@@ -46,13 +47,15 @@ def test_cli_execution_with_today_keyword(
         "issues_data": [],
     }
 
-    with patch.object(
-        DailyActivityExtractor,
-        "extract",
-        return_value=expected_payload,
+    with (
+        patch.object(
+            DailyActivityExtractor,
+            "extract",
+            return_value=expected_payload,
+        ),
+        patch("sys.argv", ["daily_activity_extractor", "today"]),
     ):
-        with patch("sys.argv", ["daily_activity_extractor", "today"]):
-            exit_code = main()
+        exit_code = main()
 
     captured_output = capsys.readouterr().out
     deserialized_data = json.loads(captured_output)
@@ -72,13 +75,15 @@ def test_cli_execution_with_yesterday_keyword(
         "issues_data": [],
     }
 
-    with patch.object(
-        DailyActivityExtractor,
-        "extract",
-        return_value=expected_payload,
+    with (
+        patch.object(
+            DailyActivityExtractor,
+            "extract",
+            return_value=expected_payload,
+        ),
+        patch("sys.argv", ["daily_activity_extractor", "yesterday"]),
     ):
-        with patch("sys.argv", ["daily_activity_extractor", "yesterday"]):
-            exit_code = main()
+        exit_code = main()
 
     captured_output = capsys.readouterr().out
     deserialized_data = json.loads(captured_output)
@@ -90,18 +95,20 @@ def test_cli_execution_with_yesterday_keyword(
 def test_cli_execution_default_fallback_to_today(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    with patch.object(
-        DailyActivityExtractor,
-        "extract",
-        return_value={
-            "date": "2026-10-24",
-            "commit_data": [],
-            "comment_data": [],
-            "issues_data": [],
-        },
-    ) as mock_extract_method:
-        with patch("sys.argv", ["daily_activity_extractor"]):
-            exit_code = main()
+    with (
+        patch.object(
+            DailyActivityExtractor,
+            "extract",
+            return_value={
+                "date": "2026-10-24",
+                "commit_data": [],
+                "comment_data": [],
+                "issues_data": [],
+            },
+        ) as mock_extract_method,
+        patch("sys.argv", ["daily_activity_extractor"]),
+    ):
+        exit_code = main()
 
     assert exit_code == 0
     mock_extract_method.assert_called_once_with("today")

@@ -140,17 +140,13 @@ class DailyActivityExtractor:
         since_timestamp = date_window.start.isoformat().replace("+00:00", "Z")
 
         try:
-            issue_comments = repository_client._api.list(
-                "issues/comments", {"since": since_timestamp}
-            )
-        except Exception:
+            issue_comments = repository_client._api.list("issues/comments", {"since": since_timestamp})
+        except Exception:  # noqa: BLE001
             issue_comments = []
 
         try:
-            review_comments = repository_client._api.list(
-                "pulls/comments", {"since": since_timestamp}
-            )
-        except Exception:
+            review_comments = repository_client._api.list("pulls/comments", {"since": since_timestamp})
+        except Exception:  # noqa: BLE001
             review_comments = []
 
         all_candidate_comments = [*issue_comments, *review_comments]
@@ -164,10 +160,7 @@ class DailyActivityExtractor:
                 if isinstance(comment_record.get("user"), dict)
                 else ""
             )
-            if (
-                not comment_author_login
-                or comment_author_login.casefold() != project.author.casefold()
-            ):
+            if not comment_author_login or comment_author_login.casefold() != project.author.casefold():
                 continue
 
             creation_timestamp = str(comment_record.get("created_at") or "")
@@ -206,7 +199,7 @@ class DailyActivityExtractor:
                 "--json",
                 "number,createdAt,author",
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             listed_issues = []
 
         if not isinstance(listed_issues, list):

@@ -2,16 +2,16 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/v2, feat/v3]
   pull_request:
-    branches: [main]
+    branches: [main, feat/v2, feat/v3]
 
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.11", "3.12"]
 
     steps:
       - uses: actions/checkout@v4
@@ -25,11 +25,6 @@ jobs:
       - name: Move ghToolkit to sibling directory
         run: mv _ghToolkit ../ghToolkit
 
-      - name: Patch absolute path for dependencies
-        run: |
-          sed -i "s|ghtoolkit @ .*ghToolkit|ghtoolkit @ file://${GITHUB_WORKSPACE}/../ghToolkit|g" pyproject.toml
-          sed -i "s|\"../ghToolkit\"|\"${GITHUB_WORKSPACE}/../ghToolkit\"|g" uv.lock || true
-
       - name: Install uv
         uses: astral-sh/setup-uv@v3
         with:
@@ -41,7 +36,7 @@ jobs:
       - name: Install dependencies
         run: |
           uv venv
-          uv pip install -e ".[dev]"
+          uv pip install -e ../ghToolkit -e ".[dev]" "ruff==0.17.2"
 
       - name: Lint with ruff
         run: |

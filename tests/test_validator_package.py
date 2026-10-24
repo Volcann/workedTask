@@ -94,6 +94,7 @@ def test_factual_validation_result_instantiation():
         overtime_attribution_percent=100.0,
     )
     assert res.is_valid is True
+    assert res.source_consistency_percent == 100.0
     assert res.claims == []
     assert res.violations == []
 

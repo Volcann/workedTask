@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from report.data_classes import (
     EXTRA_TIME_NOTE,
     DailyReport,
@@ -345,7 +347,7 @@ HTM-341 | Expose period status for employee performance results
     assert "rule_no_corporate_buzzwords" in v_fluff.failed_rules
 
 
-def test_10_fact_preservation_after_ai_rewriting():
+def test_10_ai_rewriting_requires_independent_review():
     e = make_entry("c1", "commit", "2026-10-16T12:00:00+05:00", text="HTM-341: Base commit", sha="a8c7d92")
     chunk = make_chunk(
         "folium-hr-management-tool/hr-tool-backend", "pr", "454", "HTM-341: Expose period status", [e]
@@ -362,8 +364,9 @@ def test_10_fact_preservation_after_ai_rewriting():
     assert "Added `period_status`" in text
 
     v_fact = FactualValidator.validate(text, rep)
-    assert v_fact.is_valid
-    assert v_fact.fact_support_percent == 100.0
+    assert not v_fact.is_valid
+    assert v_fact.fact_support_percent < 100.0
+    assert any("AI summary" in violation for violation in v_fact.violations)
 
 
 def test_12_empty_and_partially_documented_reporting_days():
@@ -399,7 +402,7 @@ def test_12_empty_and_partially_documented_reporting_days():
 
 
 def test_13_issue_chunk_routed_to_out_of_scope():
-    entry = make_entry("i1", "issue", "2026-10-19T14:00:00+05:00", text="Discussed database latency")
+    entry = make_entry("i1", "issue_comment", "2026-10-19T14:00:00+05:00", text="Discussed database latency")
     chunk = make_chunk(
         "folium-hr-management-tool/hr-tool-backend",
         "issue",
@@ -413,6 +416,7 @@ def test_13_issue_chunk_routed_to_out_of_scope():
     text = format_office_status(rep)
 
     assert "Out of scope:" in text
+    assert "Reviewed PRs:" not in text
     assert "Backend PR:" not in text
     assert "PR#455" not in text
     assert "Django Silk" in text
@@ -695,6 +699,93 @@ def test_22_multi_repo_same_pr_number_factual_validation():
     assert v_fact.is_valid
     assert v_fact.fact_support_percent == 100.0
     assert len(v_fact.violations) == 0
+    frontend_claim = next(c for c in v_fact.claims if c.claim.startswith("-> PR#445"))
+    assert frontend_claim.evidence_id == "folium-hr-management-tool/hr-tool-frontend:pr:445"
+
+
+def test_fabricated_claim_on_real_pr_is_rejected():
+    entry = make_entry("c1", "commit", "2026-10-20T14:00:00+05:00", text="Fix punch policy", sha="abc1234")
+    chunk = make_chunk("folium-hr-management-tool/hr-tool-backend", "pr", "458", "Fix punch policy", [entry])
+    report = make_report("2026-10-20", [chunk])
+    text = format_office_status(report).replace(
+        "Backend PR:\n", "Backend PR:\n-> PR#458 -> Built a quantum payroll engine.\n", 1
+    )
+
+    result = FactualValidator.validate(text, report)
+
+    assert not result.is_valid
+    assert result.fact_support_percent < 100.0
+    assert not next(c for c in result.claims if "quantum payroll" in c.claim).verified
+
+
+def test_comment_only_pr_is_not_implementation():
+    entry = make_entry("comment", "issue_comment", "2026-10-12T14:00:00+05:00", text="Keep this PR open.")
+    chunk = make_chunk(
+        "folium-hr-management-tool/hr-tool-backend", "pr", "434", "Scope salary reads", [entry]
+    )
+    report = make_report("2026-10-12", [chunk])
+    text = format_office_status(report)
+
+    assert "Backend PR:" not in text
+    assert "Out of scope:" in text
+    assert FactualValidator.validate(text, report).is_valid
+
+
+def test_overtime_issue_keeps_the_recorded_comment():
+    entry = make_entry(
+        "comment",
+        "issue_comment",
+        "2026-10-17T21:12:13+05:00",
+        text="-> Fixed, updated .env and restart the server.",
+    )
+    chunk = make_chunk(
+        "folium-hr-management-tool/hr-tool-backend",
+        "issue",
+        "455",
+        "Django Silk profiling",
+        [entry],
+        categories=("issues",),
+    )
+    report = make_report("2026-10-17", [chunk])
+    text = format_office_status(report)
+
+    assert "-> Issue #455: Django Silk profiling" in text
+    assert "-> Commented: Fixed, updated .env and restart the server." in text
+    assert FactualValidator.validate(text, report).is_valid
+
+
+def test_configured_shift_drives_report_and_validator_overtime():
+    entry = make_entry(
+        "evening", "commit", "2026-10-20T19:00:00+05:00", text="Fix punch policy", sha="abc1234"
+    )
+    chunk = make_chunk("folium-hr-management-tool/hr-tool-backend", "pr", "458", "Fix punch policy", [entry])
+    report = make_report("2026-10-20", [chunk])
+    report = replace(report, shift={"start": "2026-10-20T09:00:00+05:00", "end": "2026-10-20T18:00:00+05:00"})
+
+    text = format_office_status(report)
+
+    assert "Overtime:" in text
+    assert "Backend PR:" not in text
+    assert "abc1234" in format_overtime_breakdown_only(report)
+    assert FactualValidator.validate(text, report).is_valid
+
+
+def test_overnight_shift_keeps_two_am_work_regular():
+    entry = make_entry(
+        "night", "commit", "2026-10-25T02:00:00+05:00", text="Fix overnight flow", sha="def5678"
+    )
+    chunk = make_chunk(
+        "folium-hr-management-tool/hr-tool-backend", "pr", "459", "Fix overnight flow", [entry]
+    )
+    report = make_report("2026-10-24", [chunk])
+    report = replace(report, shift={"start": "2026-10-24T22:00:00+05:00", "end": "2026-10-25T06:00:00+05:00"})
+
+    text = format_office_status(report)
+
+    assert "Backend PR:" in text
+    assert "Overtime:" not in text
+    assert not format_overtime_breakdown_only(report)
+    assert FactualValidator.validate(text, report).is_valid
 
 
 def test_23_overtime_review_and_ticket_prefixed_merge_commits():

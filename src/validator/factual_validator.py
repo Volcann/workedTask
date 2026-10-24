@@ -1,72 +1,94 @@
 from __future__ import annotations
 
 import re
+from collections import defaultdict
+from dataclasses import replace
+from difflib import SequenceMatcher
 
 from constants import ALLOWED_HEADINGS
-from report.data_classes import EXTRA_TIME_NOTE, DailyReport, ReportChunk, ReportEntry
-from utils.format import is_out_of_shift
+from report.data_classes import EXTRA_TIME_NOTE, DailyReport, ReportChunk, chunk_id
+from utils.format import clean_bullet_text, format_office_status, is_out_of_report_shift
 
 from .data_classes.claim_evidence import ClaimEvidence
 from .data_classes.factual_validation_result import FactualValidationResult
 
 
+def _lines(text: str) -> list[str]:
+    return [line.strip() for line in text.splitlines() if line.strip()]
+
+
+def _source_lines(report: DailyReport) -> dict[tuple[str, str], list[ReportChunk]]:
+    """Associate each rendered line with the activity chunk that produced it."""
+    sources: dict[tuple[str, str], list[ReportChunk]] = defaultdict(list)
+    for chunk in report.chunks:
+        section = ""
+        for line in _lines(format_office_status(replace(report, chunks=(chunk,)))):
+            if line in ALLOWED_HEADINGS:
+                section = line
+            elif not (line.startswith("STATUS (") or line in {"HR-Tool", "Foster Ferret", EXTRA_TIME_NOTE}):
+                key = (section, line)
+                if chunk not in sources[key]:
+                    sources[key].append(chunk)
+    return sources
+
+
 class FactualValidator:
     @classmethod
     def validate(cls, text: str, report: DailyReport) -> FactualValidationResult:
+        """Check consistency with activity data, not truth of source messages."""
         claims: list[ClaimEvidence] = []
         violations: list[str] = []
+        lines = _lines(text)
+        canonical = _lines(format_office_status(report))
+        sources = _source_lines(report)
 
-        pr_chunks_by_number: dict[int, list[ReportChunk]] = {}
-        commits_by_sha: dict[str, ReportEntry] = {}
-        all_entries: list[ReportEntry] = []
+        matched: set[int] = set()
+        for tag, _, _, start, end in SequenceMatcher(a=canonical, b=lines, autojunk=False).get_opcodes():
+            if tag == "equal":
+                matched.update(range(start, end))
+        if lines != canonical:
+            violations.append("Report text differs from the activity-backed rendering.")
 
-        for chunk in report.chunks:
-            if chunk.kind == "pr":
-                try:
-                    pr_num = int(chunk.key)
-                    pr_chunks_by_number.setdefault(pr_num, []).append(chunk)
-                except ValueError:
-                    pass
-            for entry in chunk.entries:
-                all_entries.append(entry)
-                if entry.sha:
-                    commits_by_sha[entry.sha[:7].lower()] = entry
-                    commits_by_sha[entry.sha.lower()] = entry
-
-        lines = [line.strip() for line in text.splitlines() if line.strip()]
-        current_section = None
-        current_ticket = None
-
-        for line in lines:
+        current_section = ""
+        current_ticket: str | None = None
+        active_chunk: ReportChunk | None = None
+        for index, line in enumerate(lines):
             if line in ALLOWED_HEADINGS:
                 current_section = line
+                active_chunk = None
+                current_ticket = None
                 continue
-            if line.startswith("STATUS (") or line in {"HR-Tool", "Foster Ferret"}:
-                continue
-            if line == EXTRA_TIME_NOTE:
+            if line.startswith("STATUS (") or line in {"HR-Tool", "Foster Ferret", EXTRA_TIME_NOTE}:
                 continue
 
-            if (
-                current_section in {"Backend PR:", "Frontend PR:"}
-                and not line.startswith("->")
-                and not line.startswith("(")
-            ):
-                if "|" in line:
-                    parts = line.split("|", 1)
-                    t_id = parts[0].strip()
-                    current_ticket = t_id
-                else:
-                    current_ticket = None
+            candidates = sources.get((current_section, line), [])
+            is_chunk_header = current_section in {"Backend PR:", "Frontend PR:"} and not line.startswith(
+                ("->", "(")
+            )
+            chunk = active_chunk if not is_chunk_header and active_chunk in candidates else None
+            if chunk is None and len(candidates) == 1:
+                chunk = candidates[0]
+            if chunk is None and candidates and current_section in {"Backend PR:", "Frontend PR:"}:
+                label = "frontend" if current_section == "Frontend PR:" else "backend"
+                scoped = [c for c in candidates if label in (c.repository or "").lower()]
+                if len(scoped) == 1:
+                    chunk = scoped[0]
+
+            if is_chunk_header:
+                current_ticket = line.split("|", 1)[0].strip() if "|" in line else None
+                active_chunk = chunk
                 continue
+            if chunk is not None:
+                active_chunk = chunk
 
             pr_match = re.search(r"PR#(\d+)", line)
             pr_num = int(pr_match.group(1)) if pr_match else None
-
-            commit_match = re.search(r"Committed:\s*([0-9a-fA-F,\s]+)", line)
-            commit_shas: list[str] = []
-            if commit_match:
-                commit_shas = [s.strip().lower() for s in commit_match.group(1).split(",") if s.strip()]
-
+            commit_match = re.fullmatch(r"-> Committed:\s*([0-9a-fA-F,\s]+)", line)
+            commit_shas = (
+                [sha.strip().lower() for sha in commit_match.group(1).split(",") if sha.strip()]
+                if commit_match
+                else []
+            )
             claim_type = "general"
             if current_section == "Reviewed PRs:":
                 claim_type = "review"
@@ -77,95 +99,61 @@ class FactualValidator:
             elif current_section == "Overtime:":
                 claim_type = "overtime"
 
-            verified = True
-            source_url = ""
-            evidence_id = None
-            notes = ""
-            extra_time = current_section == "Overtime:"
+            verified = index in matched and chunk is not None
+            evidence_id = chunk_id(chunk) if chunk is not None else None
+            source_url = chunk.url if chunk is not None else ""
+            if index not in matched:
+                violations.append(f"Line is not in the activity-backed rendering: {line}")
+            if chunk is None:
+                violations.append(f"No unique source chunk for: {line}")
 
-            if pr_num is not None:
-                matching_chunks = pr_chunks_by_number.get(pr_num, [])
-                if not matching_chunks:
+            if pr_num is not None and chunk is not None:
+                if chunk.kind != "pr" or chunk.key != str(pr_num):
                     verified = False
-                    violations.append(f"PR#{pr_num} cited in text but not present in daily report evidence.")
-                else:
-                    if claim_type == "review":
-                        target_chunk = next(
-                            (
-                                c
-                                for c in matching_chunks
-                                if any(
-                                    e.kind in {"review", "review_comment", "issue_comment"} for e in c.entries
-                                )
-                            ),
-                            matching_chunks[0],
-                        )
-                        has_review_event = any(
-                            e.kind in {"review", "review_comment", "issue_comment"}
-                            for e in target_chunk.entries
-                        )
-                        if not has_review_event:
-                            verified = False
-                            violations.append(
-                                f"PR#{pr_num} listed as review but contains no review events by author."
-                            )
-                    elif claim_type == "pr_implementation":
-                        target_chunk = next(
-                            (
-                                c
-                                for c in matching_chunks
-                                if any(e.sha or e.kind == "pr_created" for e in c.entries)
-                            ),
-                            matching_chunks[0],
-                        )
-                        has_author_work = any(e.sha or e.kind == "pr_created" for e in target_chunk.entries)
-                        if not has_author_work:
-                            notes = "PR listed under implementation based on comments/presence."
-                    else:
-                        target_chunk = matching_chunks[0]
+                    violations.append(f"PR#{pr_num} does not match its source chunk.")
+                elif claim_type == "review" and not any(
+                    e.kind in {"review", "review_comment", "issue_comment"} for e in chunk.entries
+                ):
+                    verified = False
+                    violations.append(f"PR#{pr_num} has no review event by the author.")
+                elif claim_type == "pr_implementation" and not any(
+                    e.kind in {"commit", "pr_created"} for e in chunk.entries
+                ):
+                    verified = False
+                    violations.append(f"PR#{pr_num} has no implementation event by the author.")
 
-                    source_url = target_chunk.url
-                    evidence_id = f"{target_chunk.repository}:pr:{pr_num}"
+            if chunk is not None and chunk.kind == "pr":
+                summary = report.summaries.get(chunk_id(chunk))
+                if summary and line == f"-> PR#{chunk.key} -> {clean_bullet_text(summary)}":
+                    verified = False
+                    violations.append(f"AI summary for PR#{chunk.key} requires independent review.")
 
-            if commit_shas:
+            if commit_shas and chunk is not None:
                 for sha in commit_shas:
-                    clean_sha = sha[:7]
-                    matched_entry = next(
-                        (e for s, e in commits_by_sha.items() if s.startswith(clean_sha)), None
-                    )
-                    if not matched_entry:
+                    found = [
+                        e
+                        for e in chunk.entries
+                        if e.kind == "commit" and e.sha and e.sha.lower().startswith(sha)
+                    ]
+                    if len(found) != 1:
                         verified = False
-                        violations.append(f"Commit {sha} cited in text but not present in daily commits.")
-                    else:
-                        evidence_id = matched_entry.id
-                        if current_section == "Overtime:" and not is_out_of_shift(
-                            matched_entry.created_at, report.timezone
-                        ):
-                            verified = False
-                            violations.append(
-                                f"Commit {sha} listed in Overtime occurred during regular shift."
-                            )
+                        violations.append(f"Commit {sha} is not unique in its source chunk.")
+                        continue
+                    evidence_id = found[0].id
+                    source_url = found[0].url or source_url
+                    if current_section == "Overtime:" and not is_out_of_report_shift(
+                        found[0].created_at, report
+                    ):
+                        verified = False
+                        violations.append(f"Commit {sha} occurred during the regular shift.")
 
-            if current_section == "Overtime:":
-                extra_time = True
-                if pr_num and pr_num in pr_chunks_by_number:
-                    matching_chunks = pr_chunks_by_number[pr_num]
-                    target_chunk = next(
-                        (
-                            c
-                            for c in matching_chunks
-                            if any(is_out_of_shift(e.created_at, report.timezone) for e in c.entries)
-                        ),
-                        matching_chunks[0],
-                    )
-                    has_overtime_event = any(
-                        is_out_of_shift(e.created_at, report.timezone) for e in target_chunk.entries
-                    )
-                    if not has_overtime_event:
-                        verified = False
-                        violations.append(
-                            f"PR#{pr_num} listed in Overtime but all events occurred during regular shift."
-                        )
+            if (
+                current_section == "Overtime:"
+                and chunk is not None
+                and not any(is_out_of_report_shift(e.created_at, report) for e in chunk.entries)
+            ):
+                verified = False
+                violations.append(f"No out-of-shift event supports: {line}")
 
             claims.append(
                 ClaimEvidence(
@@ -178,30 +166,25 @@ class FactualValidator:
                     evidence_id=evidence_id,
                     verified=verified,
                     source=source_url,
-                    extra_time=extra_time,
-                    notes=notes,
+                    extra_time=current_section == "Overtime:",
                 )
             )
 
         total_claims = len(claims)
-        supported_claims = sum(1 for c in claims if c.verified)
+        supported_claims = sum(claim.verified for claim in claims)
         unsupported_claims = total_claims - supported_claims
-        contradicted_claims = len([v for v in violations if "not present" in v])
-
-        overtime_claims = [c for c in claims if c.extra_time]
-        verified_overtime = sum(1 for c in overtime_claims if c.verified)
-        ot_attrib_pct = (verified_overtime / len(overtime_claims) * 100.0) if overtime_claims else 100.0
-
-        fact_support_pct = (supported_claims / total_claims * 100.0) if total_claims else 100.0
-
+        overtime_claims = [claim for claim in claims if claim.extra_time]
+        verified_overtime = sum(claim.verified for claim in overtime_claims)
         return FactualValidationResult(
-            is_valid=(fact_support_pct == 100.0 and contradicted_claims == 0 and unsupported_claims == 0),
-            fact_support_percent=fact_support_pct,
+            is_valid=not violations and unsupported_claims == 0,
+            fact_support_percent=(supported_claims / total_claims * 100.0) if total_claims else 100.0,
             total_claims=total_claims,
             supported_claims=supported_claims,
-            contradicted_claims=contradicted_claims,
+            contradicted_claims=sum("does not match" in v for v in violations),
             unsupported_claims=unsupported_claims,
-            overtime_attribution_percent=ot_attrib_pct,
+            overtime_attribution_percent=(
+                verified_overtime / len(overtime_claims) * 100.0 if overtime_claims else 100.0
+            ),
             claims=claims,
             violations=violations,
         )

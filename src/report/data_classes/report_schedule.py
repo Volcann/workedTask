@@ -57,7 +57,8 @@ class ReportSchedule:
         return wall_time(day, self.shift_end, self.zone).astimezone(UTC)
 
     def is_extra_time(self, stamp: str | datetime) -> bool:
-        return parse_timestamp(stamp) > self.end_utc
+        event_time = parse_timestamp(stamp)
+        return event_time < self.start_utc or event_time >= self.end_utc
 
     def local_timestamp(self, stamp: str | datetime) -> str:
         return parse_timestamp(stamp).astimezone(self.zone).isoformat()

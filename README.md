@@ -19,7 +19,8 @@ and offset in the report. After-shift work has the exact marker:
 (The task is done in extra time)
 ```
 
-The comparison is strictly later than the actual timezone-aware shift end. A
+The regular shift includes its start and excludes its end; activity before the
+start or at/after the timezone-aware end is marked as extra time. A
 22:00–06:00 overnight shift does not mark 02:00 as overtime. Cutoffs and shifts are
 validated; nonexistent DST clock times are rejected, and ambiguous times use the
 first occurrence. Date-only and timezone-free manual timestamps are rejected.
@@ -66,6 +67,16 @@ The package includes modules implementing strict office status reporting and fac
 
 - **`status_reporter.office_format`**: Formats daily reports into the exact office format (`STATUS (DD-MMM-YYYY)` -> Project -> Conditional Sections -> `->` bullets).
 - **`validator`**: Implements `StrictFormatValidator` (structure, headers, bullets) and `FactualValidator` (evidence linking, PR numbers, commit SHAs, review segregation, overtime isolation).
+
+`FactualValidator` checks whether a status is reproducible from its supplied
+`DailyReport` activity snapshot and links each line to a repository-specific
+source chunk. Use `result.source_consistency_percent` for the percentage;
+the legacy `fact_support_percent` field remains for compatibility. This percentage is
+**source consistency**, not a guarantee that a
+commit message, PR title, review comment, or AI summary accurately describes
+the code or a production deployment. A separate live GitHub and code review is
+needed before making an external factual-accuracy claim. Historical generated
+reports must be regenerated after formatter or validator changes.
 
 ### Shift Baseline (Lahore, Pakistan)
 - **Timezone:** `Asia/Karachi`

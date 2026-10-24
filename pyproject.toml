@@ -1,62 +1,25 @@
 [build-system]
-requires = ["setuptools>=61.0.0", "wheel"]
+requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "status-reporter"
-version = "0.1.0"
-description = "Automated daily GitHub commit, PR, review, and contribution status reporter CLI"
+version = "0.2.0"
+description = "Daily work reports using centralized ghToolkit activity, shift policy, and per-PR AI chunks"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
-authors = [
-    { name = "Volcann" }
-]
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Operating System :: OS Independent",
-    "Environment :: Console",
-]
-dependencies = [
-    "python-dotenv>=1.0.0",
-    "requests>=2.28.0",
-    "google-genai>=1.0.0",
-    "ghtoolkit @ file:///home/folium/Documents/utils/ghToolkit",
-]
+dependencies = ["ghtoolkit>=0.2.0,<0.3.0", "tzdata>=2024.1"]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=7.0.0",
-    "pytest-mock>=3.10.0",
-    "ruff>=0.1.0",
-    "pre-commit>=3.0.0",
-]
+ai = ["google-genai>=1,<2"]
 
 [project.scripts]
-status-reporter = "src.extractors.daily_activity_extractor:main"
+worked-task = "cli.commands:main"
+status-report = "cli.commands:main"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "."]
+include = ["ai*", "cli*", "extractors*", "report*", "utils*", "validator*", "config*"]
 
-[tool.ruff]
-line-length = 100
-target-version = "py310"
-exclude = ["tests/legacy"]
-
-[tool.ruff.lint]
-select = ["E", "F", "W", "I", "B"]
-ignore = ["E501"]
-
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["."]
-python_files = ["test_*.py"]
-norecursedirs = ["legacy", "fixtures"]
-addopts = "-v --strict-markers --ignore=tests/legacy"
+[tool.uv.sources]
+ghtoolkit = { workspace = true }

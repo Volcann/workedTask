@@ -13,15 +13,16 @@ def test_exact_required_extra_time_note():
 @pytest.mark.parametrize(
     "timestamp, expected",
     [
-        ("2026-10-24T08:00:00+05:00", False),
+        ("2026-10-24T08:00:00+05:00", True),
+        ("2026-10-24T09:00:00+05:00", False),
         ("2026-10-24T17:59:59+05:00", False),
-        ("2026-10-24T18:00:00+05:00", False),
+        ("2026-10-24T18:00:00+05:00", True),
         ("2026-10-24T18:00:01+05:00", True),
         ("2026-10-25T02:00:00+05:00", True),
         ("2026-10-24T13:00:01Z", True),
     ],
 )
-def test_shift_end_is_strict_and_timezone_aware(schedule, timestamp, expected):
+def test_shift_boundaries_are_half_open_and_timezone_aware(schedule, timestamp, expected):
     assert schedule.is_extra_time(timestamp) is expected
 
 
@@ -36,7 +37,7 @@ def test_workday_cutoff_includes_next_day_two_am(schedule):
 def test_overnight_shift_does_not_mislabel_after_midnight_work():
     schedule = ReportSchedule(date(2026, 10, 24), "Asia/Karachi", time(22), time(6), time(12))
     assert not schedule.is_extra_time("2026-10-25T02:00:00+05:00")
-    assert not schedule.is_extra_time("2026-10-25T06:00:00+05:00")
+    assert schedule.is_extra_time("2026-10-25T06:00:00+05:00")
     assert schedule.is_extra_time("2026-10-25T06:01:00+05:00")
 
 

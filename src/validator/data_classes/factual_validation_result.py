@@ -16,3 +16,8 @@ class FactualValidationResult:
     overtime_attribution_percent: float
     claims: list[ClaimEvidence] = field(default_factory=list)
     violations: list[str] = field(default_factory=list)
+
+    @property
+    def source_consistency_percent(self) -> float:
+        """Preferred name for the legacy fact_support_percent field."""
+        return self.fact_support_percent

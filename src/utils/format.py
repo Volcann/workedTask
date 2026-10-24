@@ -128,6 +128,14 @@ def is_out_of_shift(
     return t < start_time or t >= end_time
 
 
+def is_out_of_report_shift(stamp: str | datetime, report: DailyReport) -> bool:
+    """Compare an event with the report's actual shift, including overnight shifts."""
+    event_time = parse_timestamp(stamp)
+    start = parse_timestamp(report.shift["start"])
+    end = parse_timestamp(report.shift["end"])
+    return event_time < start or event_time >= end
+
+
 def format_status_date(iso_date: str) -> str:
     parts = iso_date.split("-")
     d = date(int(parts[0]), int(parts[1]), int(parts[2]))
@@ -198,7 +206,7 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
         overtime_entries: list[ReportEntry] = []
 
         for entry in chunk.entries:
-            if is_out_of_shift(entry.created_at, report.timezone):
+            if is_out_of_report_shift(entry.created_at, report):
                 overtime_entries.append(entry)
             else:
                 regular_entries.append(entry)
@@ -208,7 +216,7 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
                 e
                 for e in regular_entries
                 if e.kind in {"review", "review_comment"}
-                or (e.kind == "issue_comment" and "prs" not in chunk.categories)
+                or (e.kind == "issue_comment" and chunk.kind == "pr" and "prs" not in chunk.categories)
             ]
             impl_entries = [e for e in regular_entries if e.kind in {"commit", "pr_created"}]
 
@@ -232,10 +240,7 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
                 else:
                     p_data["backend"].append((chunk, impl_entries))
             else:
-                if chunk.kind in {"issue", "extra_task"} or not chunk.repository:
-                    p_data["out_of_scope"].append((chunk, regular_entries))
-                else:
-                    p_data["backend"].append((chunk, regular_entries))
+                p_data["out_of_scope"].append((chunk, regular_entries))
 
         if overtime_entries:
             p_data["overtime"].append((chunk, overtime_entries))
@@ -377,6 +382,9 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
             for chunk, entries in p_data["out_of_scope"]:
                 if chunk.kind == "issue":
                     desc = chunk.title
+                elif chunk.kind == "pr":
+                    comment = next((first_line_of(e.text) for e in entries if e.text.strip()), "")
+                    desc = f"Commented on PR#{chunk.key}: {comment or chunk.title}"
                 else:
                     desc = chunk.description or chunk.title
                 clean_desc = first_line_of(desc) or clean_bullet_text(desc)
@@ -388,7 +396,9 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
             for chunk, entries in p_data["overtime"]:
                 ticket, clean_title = parse_ticket_and_title(chunk.title)
                 pr_label = f"PR#{chunk.key}" if chunk.kind == "pr" else chunk.title
-                lines.append(f"-> {clean_title}")
+                lines.append(
+                    f"-> Issue #{chunk.key}: {clean_title}" if chunk.kind == "issue" else f"-> {clean_title}"
+                )
                 if chunk.kind == "pr":
                     authored_commits = [e for e in entries if e.kind == "commit" and e.sha]
                     if authored_commits:
@@ -409,6 +419,11 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
                                 findings.extend(clean_review_finding(e.text))
                         work_desc = findings[0] if findings else "Reviewed and verified PR."
                         lines.append(f"-> {pr_label} -> {work_desc}")
+                elif chunk.kind == "issue":
+                    for entry in entries:
+                        if entry.kind == "issue_comment" and entry.text.strip():
+                            comment = re.sub(r"^#+\s*", "", first_line_of(entry.text))
+                            lines.append(f"-> Commented: {comment}")
                 else:
                     authored_commits = [e for e in entries if e.kind == "commit" and e.sha]
                     if authored_commits:
@@ -427,7 +442,7 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
 def format_overtime_breakdown_only(report: DailyReport) -> str:
     overtime_chunks: list[tuple[ReportChunk, list[ReportEntry]]] = []
     for chunk in report.chunks:
-        overtime_entries = [e for e in chunk.entries if is_out_of_shift(e.created_at, report.timezone)]
+        overtime_entries = [e for e in chunk.entries if is_out_of_report_shift(e.created_at, report)]
         if overtime_entries:
             overtime_chunks.append((chunk, overtime_entries))
 
@@ -438,7 +453,9 @@ def format_overtime_breakdown_only(report: DailyReport) -> str:
     for chunk, entries in overtime_chunks:
         _, clean_title = parse_ticket_and_title(chunk.title)
         pr_label = f"PR#{chunk.key}" if chunk.kind == "pr" else chunk.title
-        lines.append(f"-> {clean_title}")
+        lines.append(
+            f"-> Issue #{chunk.key}: {clean_title}" if chunk.kind == "issue" else f"-> {clean_title}"
+        )
         if chunk.kind == "pr":
             authored_commits = [e for e in entries if e.kind == "commit" and e.sha]
             if authored_commits:
@@ -457,6 +474,11 @@ def format_overtime_breakdown_only(report: DailyReport) -> str:
                         findings.extend(clean_review_finding(e.text))
                 work_desc = findings[0] if findings else "Reviewed and verified PR."
                 lines.append(f"-> {pr_label} -> {work_desc}")
+        elif chunk.kind == "issue":
+            for entry in entries:
+                if entry.kind == "issue_comment" and entry.text.strip():
+                    comment = re.sub(r"^#+\s*", "", first_line_of(entry.text))
+                    lines.append(f"-> Commented: {comment}")
         else:
             authored_commits = [e for e in entries if e.kind == "commit" and e.sha]
             if authored_commits:

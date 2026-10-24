@@ -3,7 +3,7 @@
 SHELL := /bin/bash
 VENV := .venv
 PYTHON := $(if $(wildcard $(VENV)/bin/python3),$(VENV)/bin/python3,python3)
-CLI := $(if $(wildcard $(VENV)/bin/status-reporter),$(VENV)/bin/status-reporter,$(PYTHON) -m status_reporter)
+CLI := $(if $(wildcard $(VENV)/bin/worked-task),$(VENV)/bin/worked-task,$(PYTHON) -m src)
 
 DATE ?= today
 PROJECT ?=

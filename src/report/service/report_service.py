@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, Protocol
 
 from ghtoolkit import DateWindow, GitHubHub, RepositoryActivity
+from status_reporter_auth import github_token
 
 from report.data_classes import (
     EXTRA_TIME_NOTE,
@@ -27,7 +28,7 @@ class ActivitySource(Protocol):
 
 class ReportService:
     def __init__(self, source: ActivitySource | None = None):
-        self.source = source or GitHubHub()
+        self.source = source if source is not None else GitHubHub(token=github_token())
 
     def generate(
         self,
@@ -73,6 +74,7 @@ class ReportService:
                             event.url,
                             event.branches,
                             event.review_state,
+                            event.actor_login,
                         )
                     )
                 any_extra = any(entry.extra_time for entry in entries)
@@ -89,6 +91,10 @@ class ReportService:
                         tuple(entries),
                         any_extra,
                         EXTRA_TIME_NOTE if any_extra else None,
+                        entity.merged_at,
+                        entity.merged_by,
+                        entity.merge_commit_sha,
+                        entity.merge_status_verified,
                     )
                 )
         seen_manual: set[str] = set()

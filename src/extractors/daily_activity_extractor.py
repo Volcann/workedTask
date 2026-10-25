@@ -167,7 +167,10 @@ class DailyActivityExtractor:
             if not date_window.contains(creation_timestamp):
                 continue
 
-            comment_identifier = str(comment_record.get("id"))
+            raw_id = comment_record.get("id")
+            if raw_id is None:
+                continue
+            comment_identifier = str(raw_id)
             if comment_identifier and comment_identifier not in recorded_comment_ids:
                 recorded_comment_ids.add(comment_identifier)
                 extracted_comments.append({comment_identifier: creation_timestamp})
@@ -221,7 +224,10 @@ class DailyActivityExtractor:
             if not date_window.contains(creation_timestamp):
                 continue
 
-            issue_number = str(issue_record.get("number"))
+            raw_number = issue_record.get("number")
+            if raw_number is None:
+                continue
+            issue_number = str(raw_number)
             if issue_number and issue_number not in recorded_issue_numbers:
                 recorded_issue_numbers.add(issue_number)
                 extracted_issues.append({issue_number: creation_timestamp})

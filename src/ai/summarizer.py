@@ -6,7 +6,7 @@ from typing import Any, Protocol
 from constants import ACTIVE_FREE_MODELS
 from report.data_classes import ReportChunk
 from utils.models import ensure_env_loaded, get_active_models
-from utils.prompt import build_prompt
+from utils.prompt import build_prompt, build_review_prompt
 
 
 class Summarizer(Protocol):
@@ -40,8 +40,12 @@ class GeminiSummarizer:
         self.client = client
 
     def summarize(self, chunk: ReportChunk) -> str:
-        prompt = build_prompt(chunk)
+        return self._generate(build_prompt(chunk))
 
+    def summarize_review(self, chunk: ReportChunk) -> str:
+        return self._generate(build_review_prompt(chunk))
+
+    def _generate(self, prompt: str) -> str:
         # Candidates to try: primary model first, followed by active free models fallback (Aevora pattern)
         candidates = [self.model]
         active = get_active_models(self.client)

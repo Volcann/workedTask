@@ -27,8 +27,12 @@ jobs:
 
       - name: Patch absolute path for dependencies
         run: |
-          sed -i "s|ghtoolkit @ .*ghToolkit|ghtoolkit @ file://${GITHUB_WORKSPACE}/../ghToolkit|g" pyproject.toml
-          sed -i "s|\"../ghToolkit\"|\"${GITHUB_WORKSPACE}/../ghToolkit\"|g" uv.lock || true
+          GH_TOOLKIT_ABS="${GITHUB_WORKSPACE}/../ghToolkit"
+          # Patch pyproject.toml (uses PEP 508 file:// URL syntax)
+          sed -i "s|ghtoolkit @ .*ghToolkit|ghtoolkit @ file://${GH_TOOLKIT_ABS}|g" pyproject.toml
+          # Patch uv.lock: replace both editable and non-editable path forms
+          sed -i "s|editable = \"[^\"]*ghToolkit\"|editable = \"${GH_TOOLKIT_ABS}\"|g" uv.lock
+          sed -i "s|path = \"[^\"]*ghToolkit\"|path = \"${GH_TOOLKIT_ABS}\"|g" uv.lock
 
       - name: Install uv
         uses: astral-sh/setup-uv@v3
@@ -41,7 +45,7 @@ jobs:
       - name: Install dependencies
         run: |
           uv venv
-          uv pip install -e ".[dev]"
+          uv sync --extra dev --frozen
 
       - name: Lint with ruff
         run: |

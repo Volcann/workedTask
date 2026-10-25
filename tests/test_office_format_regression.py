@@ -124,6 +124,125 @@ def test_2_pr_review_entries():
     assert v_fact.fact_support_percent == 100.0
 
 
+def test_reviewed_marker_uses_authored_findings_and_keeps_the_impact():
+    entries = [
+        make_entry("summary", "review", "2026-10-02T15:00:00+05:00", text="-> Reviewed changes."),
+        make_entry(
+            "migration",
+            "review_comment",
+            "2026-10-02T14:00:00+05:00",
+            text=(
+                "Can we create separate clones for older versions?\n\n"
+                "Otherwise, overlapping parameters will violate unique constraints "
+                "and lose past evaluations."
+            ),
+        ),
+        make_entry(
+            "lock",
+            "review_comment",
+            "2026-10-02T14:15:00+05:00",
+            text="Adding parameters bypasses the lock on evaluated sets.",
+        ),
+    ]
+    chunk = make_chunk(
+        "folium-hr-management-tool/hr-tool-backend",
+        "pr",
+        "410",
+        "HTM-298: Replace KPISet versions with clones",
+        entries,
+        categories=("reviewed_prs",),
+    )
+    report = make_report("2026-10-02", [chunk])
+
+    status = format_office_status(report)
+
+    assert "-> HTM-298: Replace KPISet versions with clones -> PR#410" in status
+    assert "-> Documented 2 review findings." in status
+    assert "separate clones for older versions? Otherwise, overlapping parameters" in status
+    assert "lose past evaluations." in status
+    assert "Adding parameters bypasses the lock on evaluated sets." in status
+    assert "-> Reviewed changes." not in status
+    assert FactualValidator.validate(status, report).is_valid
+
+
+def test_marker_only_self_review_does_not_invent_findings():
+    entry = make_entry(
+        "self_review",
+        "review",
+        "2026-10-23T18:34:19+05:00",
+        text="-> Reviewed my own PR.",
+    )
+    chunk = make_chunk(
+        "folium-hr-management-tool/hr-tool-backend",
+        "pr",
+        "469",
+        "HMT-361: Add organization hold management",
+        [entry],
+        categories=("reviewed_prs",),
+    )
+    report = make_report("2026-10-23", [chunk])
+
+    status = format_office_status(report)
+
+    assert "-> Reviewed my own PR." in status
+    assert "admin edits" not in status
+    assert FactualValidator.validate(status, report).is_valid
+
+
+def test_ai_review_impact_replaces_long_comments_but_keeps_review_links():
+    entry = ReportEntry(
+        id="finding",
+        kind="review_comment",
+        text="Could we check attendance already linked to this holiday? Otherwise a saved row stays marked as a holiday.",
+        created_at="2026-10-13T12:49:00+05:00",
+        extra_time=False,
+        note=None,
+        url="https://github.com/acme/backend/pull/445#discussion_r1",
+        actor_login="alice",
+    )
+    chunk = make_chunk("acme/backend", "pr", "445", "Holiday attendance", [entry], ("reviewed_prs",))
+    report = make_report(
+        "2026-10-13",
+        [chunk],
+        summaries={
+            "review:acme/backend:pr:445": "Flagged stale holiday attendance when an employee leaves a department."
+        },
+    )
+
+    status = format_office_status(report)
+
+    assert "-> Documented 1 review finding." in status
+    assert "-> Review impact: Flagged stale holiday attendance" in status
+    assert "#discussion_r1" in status
+    assert "Could we check attendance" not in status
+    assert FactualValidator.validate(status, report).is_valid
+
+
+def test_reviewed_pr_includes_conversation_finding_alongside_implementation():
+    review = make_entry("review", "review", "2026-10-20T13:00:00+05:00")
+    comment = make_entry(
+        "comment",
+        "issue_comment",
+        "2026-10-20T13:01:00+05:00",
+        text="If no approval configuration exists, check whether HR approval is required.",
+    )
+    commit = make_entry(
+        "commit", "commit", "2026-10-20T13:02:00+05:00", text="Implement approvals", sha="abc1234"
+    )
+    chunk = make_chunk(
+        "acme/backend", "pr", "460", "Fix approval display", [review, comment, commit],
+        ("prs", "reviewed_prs"),
+    )
+    report = make_report("2026-10-20", [chunk])
+
+    status = format_office_status(report)
+
+    assert "Reviewed PRs:" in status
+    assert "If no approval configuration exists" in status
+    assert "Backend PR:" in status
+    assert FactualValidator.validate(status, report).is_valid
+
+
 def test_3_backend_and_frontend_grouping():
     e_be = make_entry(
         "be1", "commit", "2026-09-11T14:00:00+05:00", text="HMT-258 | Add search", sha="a1b2c3d"

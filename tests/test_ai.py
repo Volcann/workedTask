@@ -12,6 +12,7 @@ from ai import (
     get_active_models,
     probe_gemini_models,
 )
+from utils.prompt import build_review_prompt
 from report.data_classes import ReportChunk, ReportEntry
 
 
@@ -108,6 +109,26 @@ def test_build_prompt_rejects_non_pr(sample_pr_chunk):
         build_prompt(issue_chunk)
 
 
+def test_review_prompt_uses_comments_without_implementation_context(sample_pr_chunk):
+    review = ReportEntry(
+        id="review-1",
+        kind="review_comment",
+        text="Missing lock could leave approval routing stale.",
+        created_at="2026-10-24T15:00:00+05:00",
+        extra_time=False,
+        note=None,
+    )
+    from dataclasses import replace
+
+    chunk = replace(sample_pr_chunk, entries=(*sample_pr_chunk.entries, review))
+    prompt = build_review_prompt(chunk)
+
+    assert "Missing lock could leave approval routing stale" in prompt
+    assert "feat: add active model detection" not in prompt
+    assert "NO_FINDING" in prompt
+    assert "untrusted data" in prompt
+
+
 def test_gemini_summarizer_with_fallback(sample_pr_chunk):
     call_records = []
 
@@ -123,6 +144,16 @@ def test_gemini_summarizer_with_fallback(sample_pr_chunk):
     assert result == "Summary from fallback model"
     assert call_records[0] == "gemini-3.5-flash-lite"
     assert call_records[1] == "gemini-2.5-flash-lite"
+
+
+def test_gemini_review_summary_uses_review_prompt(sample_pr_chunk):
+    fake_client = SimpleNamespace(
+        models=SimpleNamespace(generate_content=Mock(return_value=SimpleNamespace(text="NO_FINDING")))
+    )
+    ai = GeminiSummarizer("gemini-3.5-flash-lite", client=fake_client)
+
+    assert ai.summarize_review(sample_pr_chunk) == "NO_FINDING"
+    assert "BEGIN_REVIEW_COMMENTS_JSON" in fake_client.models.generate_content.call_args.kwargs["contents"]
 
 
 def test_gemini_summarizer_empty_summary_raises(sample_pr_chunk):

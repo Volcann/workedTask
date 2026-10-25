@@ -91,6 +91,10 @@ class FactualValidator:
                 current_ticket = line.split("|", 1)[0].strip() if "|" in line else None
                 active_chunk = chunk
                 continue
+            if current_section == "Overtime:" and line.startswith("->"):
+                ot_m = re.match(r"^->\s*([A-Za-z]{2,6}-\d+):", line)
+                if ot_m:
+                    current_ticket = ot_m.group(1).upper()
             if chunk is not None:
                 active_chunk = chunk
 

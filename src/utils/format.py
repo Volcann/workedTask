@@ -50,6 +50,8 @@ def parse_ticket_and_title(raw_title: str) -> tuple[str | None, str]:
     if match:
         ticket = match.group(1).upper()
         title = match.group(2).strip()
+        if title and "-" in title and " " not in title:
+            title = title.replace("-", " ").replace("_", " ")
         title = re.sub(r"\bPR\s+(\d+)\b", r"PR#\1", title)
         return ticket, _clean_title(title or cleaned)
 
@@ -124,7 +126,7 @@ def clean_commit_message(text: str | None) -> str:
     ).strip()
     clean_line = re.sub(r"^(?:->|[-*])\s*", "", clean_line).strip()
     if not clean_line:
-        return ""
+        return line.capitalize() if line else ""
     clean_line = clean_line[0].upper() + clean_line[1:]
     return clean_line
 
@@ -142,10 +144,13 @@ def is_out_of_shift(
 
 def is_out_of_report_shift(stamp: str | datetime, report: DailyReport) -> bool:
     """Compare an event with the report's actual shift, including overnight shifts."""
-    event_time = parse_timestamp(stamp)
-    start = parse_timestamp(report.shift["start"])
-    end = parse_timestamp(report.shift["end"])
-    return event_time < start or event_time >= end
+    try:
+        event_time = parse_timestamp(stamp)
+        start = parse_timestamp(report.shift["start"])
+        end = parse_timestamp(report.shift["end"])
+        return event_time < start or event_time >= end
+    except (KeyError, ValueError, TypeError):
+        return is_out_of_shift(stamp, tz_name=report.timezone)
 
 
 def format_status_date(iso_date: str) -> str:
@@ -278,6 +283,44 @@ def _review_ai_result(chunk: ReportChunk, report: DailyReport) -> str | None:
 def _review_impact_line(summary: str) -> str:
     compact = re.sub(r"\s+", " ", clean_bullet_text(summary))
     return f"-> Review impact: {ensure_period(compact)}"
+
+
+def extract_ticket_for_chunk(
+    chunk: ReportChunk,
+    entries: list[ReportEntry] | tuple[ReportEntry, ...] | None = None,
+) -> str | None:
+    ticket, _ = parse_ticket_and_title(chunk.title)
+    if ticket:
+        return ticket
+    if entries:
+        for e in entries:
+            m = re.search(r"\b([A-Za-z]{2,6}-\d+)\b", e.text or "")
+            if m:
+                return m.group(1).upper()
+            for b in e.branches:
+                m = re.search(r"\b([A-Za-z]{2,6}-\d+)\b", b)
+                if m:
+                    return m.group(1).upper()
+    if chunk.description:
+        m = re.search(r"\b([A-Za-z]{2,6}-\d+)\b", chunk.description)
+        if m:
+            return m.group(1).upper()
+    return None
+
+
+def format_overtime_header(
+    chunk: ReportChunk,
+    entries: list[ReportEntry] | tuple[ReportEntry, ...] | None = None,
+) -> str:
+    ticket = extract_ticket_for_chunk(chunk, entries)
+    _, clean_title = parse_ticket_and_title(chunk.title)
+    if ticket:
+        if chunk.kind == "issue":
+            return f"-> {ticket}: Issue #{chunk.key}: {clean_title}"
+        if re.match(rf"^{re.escape(ticket)}[\s:|–—-]+", clean_title, re.IGNORECASE):
+            return f"-> {clean_title}"
+        return f"-> {ticket}: {clean_title}"
+    return f"-> Issue #{chunk.key}: {clean_title}" if chunk.kind == "issue" else f"-> {clean_title}"
 
 
 def format_office_status(report: DailyReport, default_project: str = "HR-Tool") -> str:
@@ -526,11 +569,9 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
         if p_data["overtime"]:
             lines.append("Overtime:")
             for chunk, entries in p_data["overtime"]:
-                ticket, clean_title = parse_ticket_and_title(chunk.title)
+                _, clean_title = parse_ticket_and_title(chunk.title)
                 pr_label = f"PR#{chunk.key}" if chunk.kind == "pr" else chunk.title
-                lines.append(
-                    f"-> Issue #{chunk.key}: {clean_title}" if chunk.kind == "issue" else f"-> {clean_title}"
-                )
+                lines.append(format_overtime_header(chunk, entries))
                 if chunk.kind == "pr":
                     lines.extend(_review_action_lines(entries, report))
                     review_summary = _review_ai_result(chunk, report)
@@ -579,7 +620,7 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
                         short_shas = [c.sha[:7] for c in authored_commits if c.sha]
                         if short_shas:
                             lines.append(f"-> Committed: {', '.join(dict.fromkeys(short_shas))}")
-                lines.append(EXTRA_TIME_NOTE)
+            lines.append(EXTRA_TIME_NOTE)
             lines.append("")
 
     while lines and lines[-1] == "":
@@ -601,10 +642,8 @@ def format_overtime_breakdown_only(report: DailyReport) -> str:
     lines: list[str] = []
     for chunk, entries in overtime_chunks:
         _, clean_title = parse_ticket_and_title(chunk.title)
+        lines.append(format_overtime_header(chunk, entries))
         pr_label = f"PR#{chunk.key}" if chunk.kind == "pr" else chunk.title
-        lines.append(
-            f"-> Issue #{chunk.key}: {clean_title}" if chunk.kind == "issue" else f"-> {clean_title}"
-        )
         if chunk.kind == "pr":
             lines.extend(_review_action_lines(entries, report))
             review_summary = _review_ai_result(chunk, report)
@@ -649,5 +688,6 @@ def format_overtime_breakdown_only(report: DailyReport) -> str:
                 short_shas = [c.sha[:7] for c in authored_commits if c.sha]
                 if short_shas:
                     lines.append(f"-> Committed: {', '.join(dict.fromkeys(short_shas))}")
+    if lines:
         lines.append(EXTRA_TIME_NOTE)
     return "\n".join(lines).strip()

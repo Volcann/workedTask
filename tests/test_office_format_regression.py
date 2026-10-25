@@ -1009,3 +1009,56 @@ def test_23_overtime_review_and_ticket_prefixed_merge_commits():
     assert "PR#276" in ot_breakdown
     assert "Documented endpoint path should include /status/." in ot_breakdown
     assert "Committed:" not in ot_breakdown
+
+
+def test_24_overtime_always_mentions_ticket_number():
+    e_ot = make_entry(
+        "c_ot",
+        "commit",
+        "2026-09-28T20:30:00+05:00",
+        text="HTM-311: Consolidate overtime migrations",
+        sha="b549df4",
+    )
+    chunk = make_chunk(
+        "folium-hr-management-tool/hr-tool-backend",
+        "pr",
+        "400",
+        "HTM-302: payroll issues",
+        [e_ot],
+    )
+    rep = make_report("2026-09-28", [chunk])
+    text = format_office_status(rep)
+
+    assert "Overtime:" in text
+    assert "-> HTM-302: Payroll issues" in text
+    assert "-> PR#400 -> Consolidate overtime migrations" in text
+    assert "-> Committed: b549df4" in text
+    assert EXTRA_TIME_NOTE in text
+
+    ot_breakdown = format_overtime_breakdown_only(rep)
+    assert "-> HTM-302: Payroll issues" in ot_breakdown
+    assert "-> PR#400 -> Consolidate overtime migrations" in ot_breakdown
+    assert "-> Committed: b549df4" in ot_breakdown
+
+    v_fmt = StrictFormatValidator.validate(text)
+    assert v_fmt.is_valid
+    v_fact = FactualValidator.validate(text, rep)
+    assert v_fact.is_valid
+
+
+def test_25_overtime_marker_appears_once_at_section_end():
+    e_ot1 = make_entry("ot1", "commit", "2026-10-08T20:30:00+05:00", text="HTM-327: Fix 1", sha="1111111")
+    chunk1 = make_chunk("folium-hr-management-tool/hr-tool-backend", "pr", "419", "HTM-327: Task 1", [e_ot1])
+
+    e_ot2 = make_entry("ot2", "commit", "2026-10-08T21:00:00+05:00", text="HMT-291: Fix 2", sha="2222222")
+    chunk2 = make_chunk("folium-hr-management-tool/hr-tool-backend", "pr", "432", "HMT-291: Task 2", [e_ot2])
+
+    rep = make_report("2026-10-08", [chunk1, chunk2])
+    text = format_office_status(rep)
+
+    assert "Overtime:" in text
+    assert text.count(EXTRA_TIME_NOTE) == 1
+
+    ot_breakdown = format_overtime_breakdown_only(rep)
+    assert ot_breakdown.count(EXTRA_TIME_NOTE) == 1
+    assert ot_breakdown.endswith(EXTRA_TIME_NOTE)

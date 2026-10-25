@@ -88,6 +88,17 @@ def test_ai_is_not_called_without_a_provider(activity, schedule):
     assert report.summaries == {}
 
 
+def test_review_ai_summary_is_stored_separately_from_work_summary(activity, schedule):
+    ai = SimpleNamespace(
+        summarize=Mock(return_value="Implementation summary."),
+        summarize_review=Mock(return_value="Flagged an approval routing gap."),
+    )
+    report = ReportService(source_for(activity)).generate(["acme/widget"], "alice", schedule, summarizer=ai)
+
+    assert ai.summarize_review.called
+    assert any(key.startswith("review:acme/widget:pr:") for key in report.summaries)
+
+
 def test_ai_failure_raises_unless_explicit_raw_fallback(activity, schedule):
     ai = SimpleNamespace(summarize=Mock(side_effect=RuntimeError("provider failed")))
     service = ReportService(source_for(activity))

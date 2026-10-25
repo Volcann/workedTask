@@ -148,6 +148,23 @@ class ReportService:
                     warnings.append(
                         f"AI summary unavailable for {chunk_id(chunk)}; original evidence retained."
                     )
+                review_summarizer = getattr(summarizer, "summarize_review", None)
+                if callable(review_summarizer) and any(
+                    entry.kind in {"review_comment", "issue_comment"} and entry.text.strip()
+                    for entry in chunk.entries
+                ):
+                    try:
+                        review_summary = review_summarizer(chunk)
+                        if not isinstance(review_summary, str) or not review_summary.strip():
+                            raise ValueError("Empty AI review summary.")
+                        if review_summary.strip() != "NO_FINDING":
+                            summaries[f"review:{chunk_id(chunk)}"] = review_summary.strip()
+                    except Exception:
+                        if ai_failure == "raise":
+                            raise
+                        warnings.append(
+                            f"AI review summary unavailable for {chunk_id(chunk)}; original evidence retained."
+                        )
         return DailyReport(
             schedule.work_date.isoformat(),
             schedule.timezone,

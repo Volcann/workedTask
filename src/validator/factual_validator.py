@@ -83,9 +83,7 @@ class FactualValidator:
             ):
                 chunk = active_chunk
             if chunk is None and pr_num is not None:
-                same_number = [
-                    c for c in report.chunks if c.kind == "pr" and c.key == str(pr_num)
-                ]
+                same_number = [c for c in report.chunks if c.kind == "pr" and c.key == str(pr_num)]
                 if len(same_number) == 1:
                     chunk = same_number[0]
 
@@ -147,9 +145,13 @@ class FactualValidator:
                     violations.append(f"PR#{pr_num} has no merge event by the author.")
 
             if chunk is not None and chunk.kind == "pr":
-                if line.startswith("-> Merged") and not (
-                    chunk.merge_status_verified and chunk.merged_at
-                ):
+                if line.startswith("-> Review impact:"):
+                    review_key = f"review:{chunk_id(chunk)}"
+                    verified_key = f"review_verified:{chunk_id(chunk)}"
+                    if report.summaries.get(verified_key) != report.summaries.get(review_key):
+                        verified = False
+                        violations.append(f"AI review impact for PR#{chunk.key} requires independent review.")
+                if line.startswith("-> Merged") and not (chunk.merge_status_verified and chunk.merged_at):
                     verified = False
                     violations.append(f"PR#{chunk.key} has no verified merge metadata.")
                 summary = report.summaries.get(chunk_id(chunk))

@@ -17,17 +17,21 @@ from utils.models import (
 
 
 def test_ensure_env_loaded_noop_when_key_present():
-    with patch.dict(os.environ, {"GEMINI_API_KEY": "dummy_key"}, clear=True):
-        with patch("pathlib.Path.is_file") as mock_is_file:
-            ensure_env_loaded()
-            mock_is_file.assert_not_called()
+    with (
+        patch.dict(os.environ, {"GEMINI_API_KEY": "dummy_key"}, clear=True),
+        patch("pathlib.Path.is_file") as mock_is_file,
+    ):
+        ensure_env_loaded()
+        mock_is_file.assert_not_called()
 
 
 def test_ensure_env_loaded_noop_when_google_key_present():
-    with patch.dict(os.environ, {"GOOGLE_API_KEY": "dummy_key"}, clear=True):
-        with patch("pathlib.Path.is_file") as mock_is_file:
-            ensure_env_loaded()
-            mock_is_file.assert_not_called()
+    with (
+        patch.dict(os.environ, {"GOOGLE_API_KEY": "dummy_key"}, clear=True),
+        patch("pathlib.Path.is_file") as mock_is_file,
+    ):
+        ensure_env_loaded()
+        mock_is_file.assert_not_called()
 
 
 def test_ensure_env_loaded_searches_candidates_and_loads(tmp_path: Path):
@@ -41,14 +45,14 @@ def test_ensure_env_loaded_searches_candidates_and_loads(tmp_path: Path):
         if str(path) == str(env_file):
             os.environ["GEMINI_API_KEY"] = "loaded_from_test_env"
 
-    with patch.dict(os.environ, {}, clear=True):
-        with (
-            patch("pathlib.Path.is_file", autospec=True, side_effect=fake_is_file),
-            patch("dotenv.load_dotenv", side_effect=fake_load_dotenv) as mock_load,
-        ):
-            ensure_env_loaded()
-            mock_load.assert_called()
-            assert os.environ.get("GEMINI_API_KEY") == "loaded_from_test_env"
+    with (
+        patch.dict(os.environ, {}, clear=True),
+        patch("pathlib.Path.is_file", autospec=True, side_effect=fake_is_file),
+        patch("dotenv.load_dotenv", side_effect=fake_load_dotenv) as mock_load,
+    ):
+        ensure_env_loaded()
+        mock_load.assert_called()
+        assert os.environ.get("GEMINI_API_KEY") == "loaded_from_test_env"
 
 
 def test_ensure_env_loaded_handles_dotenv_import_error():
@@ -59,10 +63,9 @@ def test_ensure_env_loaded_handles_dotenv_import_error():
             raise ImportError("No module named dotenv")
         return orig_import(name, *args, **kwargs)
 
-    with patch.dict(os.environ, {}, clear=True):
-        with patch("builtins.__import__", side_effect=failing_import):
-            # Must not raise
-            ensure_env_loaded()
+    with patch.dict(os.environ, {}, clear=True), patch("builtins.__import__", side_effect=failing_import):
+        # Must not raise
+        ensure_env_loaded()
 
 
 def test_get_active_models_fallback_when_client_fails():
@@ -105,12 +108,14 @@ def test_probe_gemini_models_client_init_failure():
             raise ImportError("Cannot import genai")
         return orig_import(name, *args, **kwargs)
 
-    with patch.dict(os.environ, {"GEMINI_API_KEY": "fake_key"}):
-        with patch("builtins.__import__", side_effect=failing_genai):
-            results = probe_gemini_models(client=None)
-            assert len(results) == 1
-            assert results[0]["name"] == "client_init"
-            assert results[0]["status"] == "FAILED"
+    with (
+        patch.dict(os.environ, {"GEMINI_API_KEY": "fake_key"}),
+        patch("builtins.__import__", side_effect=failing_genai),
+    ):
+        results = probe_gemini_models(client=None)
+        assert len(results) == 1
+        assert results[0]["name"] == "client_init"
+        assert results[0]["status"] == "FAILED"
 
 
 def test_probe_gemini_models_various_status_codes():

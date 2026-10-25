@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -12,8 +13,8 @@ from ai import (
     get_active_models,
     probe_gemini_models,
 )
-from utils.prompt import build_review_prompt
 from report.data_classes import ReportChunk, ReportEntry
+from utils.prompt import build_review_prompt
 
 
 @pytest.fixture
@@ -129,6 +130,33 @@ def test_review_prompt_uses_comments_without_implementation_context(sample_pr_ch
     assert "untrusted data" in prompt
 
 
+def test_review_prompt_omits_check_ins_and_validation_only_notes(sample_pr_chunk):
+    entries = (
+        ReportEntry("r1", "review", "Reviewed my own PR.", "2026-10-24T15:00:00+05:00", False, None),
+        ReportEntry(
+            "c1",
+            "issue_comment",
+            "Validation: Reviewed PR#12; tests passed.",
+            "2026-10-24T15:01:00+05:00",
+            False,
+            None,
+        ),
+        ReportEntry(
+            "c2",
+            "review_comment",
+            "The UI does not display the API message.",
+            "2026-10-24T15:02:00+05:00",
+            False,
+            None,
+        ),
+    )
+    prompt = build_review_prompt(replace(sample_pr_chunk, entries=entries))
+
+    assert "The UI does not display" in prompt
+    assert "Reviewed my own PR" not in prompt
+    assert "tests passed" not in prompt
+
+
 def test_gemini_summarizer_with_fallback(sample_pr_chunk):
     call_records = []
 
@@ -151,9 +179,26 @@ def test_gemini_review_summary_uses_review_prompt(sample_pr_chunk):
         models=SimpleNamespace(generate_content=Mock(return_value=SimpleNamespace(text="NO_FINDING")))
     )
     ai = GeminiSummarizer("gemini-3.5-flash-lite", client=fake_client)
+    review = ReportEntry(
+        id="review-1",
+        kind="review_comment",
+        text="The UI does not show the API message.",
+        created_at="2026-10-24T15:00:00+05:00",
+        extra_time=False,
+        note=None,
+    )
+    chunk = replace(sample_pr_chunk, entries=(*sample_pr_chunk.entries, review))
+
+    assert ai.summarize_review(chunk) == "NO_FINDING"
+    assert "BEGIN_REVIEW_COMMENTS_JSON" in fake_client.models.generate_content.call_args.kwargs["contents"]
+
+
+def test_gemini_skips_model_when_review_has_no_substantive_comment(sample_pr_chunk):
+    fake_client = SimpleNamespace(models=SimpleNamespace(generate_content=Mock()))
+    ai = GeminiSummarizer("gemini-3.5-flash-lite", client=fake_client)
 
     assert ai.summarize_review(sample_pr_chunk) == "NO_FINDING"
-    assert "BEGIN_REVIEW_COMMENTS_JSON" in fake_client.models.generate_content.call_args.kwargs["contents"]
+    fake_client.models.generate_content.assert_not_called()
 
 
 def test_gemini_summarizer_empty_summary_raises(sample_pr_chunk):

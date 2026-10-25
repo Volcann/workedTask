@@ -6,7 +6,7 @@ from typing import Any, Protocol
 from constants import ACTIVE_FREE_MODELS
 from report.data_classes import ReportChunk
 from utils.models import ensure_env_loaded, get_active_models
-from utils.prompt import build_prompt, build_review_prompt
+from utils.prompt import build_prompt, build_review_prompt, review_comment_entries
 
 
 class Summarizer(Protocol):
@@ -43,6 +43,8 @@ class GeminiSummarizer:
         return self._generate(build_prompt(chunk))
 
     def summarize_review(self, chunk: ReportChunk) -> str:
+        if not review_comment_entries(chunk):
+            return "NO_FINDING"
         return self._generate(build_review_prompt(chunk))
 
     def _generate(self, prompt: str) -> str:

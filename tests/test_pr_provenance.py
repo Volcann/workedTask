@@ -17,9 +17,7 @@ def _report(fake_client, schedule):
     return ReportService(source).generate(["acme/widget"], "alice", schedule)
 
 
-def test_approval_with_body_and_merge_by_same_user_are_separate_facts(
-    fake_client, fake_gateway, schedule
-):
+def test_approval_with_body_and_merge_by_same_user_are_separate_facts(fake_client, fake_gateway, schedule):
     pr = next(item for item in fake_gateway.pulls if item["number"] == 37)
     pr.update(
         merged_at="2026-10-24T12:30:00Z",
@@ -67,9 +65,7 @@ def test_merge_without_other_activity_still_appears(fake_client, fake_gateway, s
     assert FactualValidator.validate(text, report).is_valid
 
 
-def test_merge_by_other_user_is_not_attributed_to_report_author(
-    fake_client, fake_gateway, schedule
-):
+def test_merge_by_other_user_is_not_attributed_to_report_author(fake_client, fake_gateway, schedule):
     pr = next(item for item in fake_gateway.pulls if item["number"] == 37)
     pr.update(merged_at="2026-10-24T12:30:00Z", merged_by={"login": "bob"})
     report = _report(fake_client, schedule)
@@ -139,9 +135,7 @@ def test_validator_rejects_changed_merger_identity(fake_client, fake_gateway, sc
     assert not FactualValidator.validate(forged, report).is_valid
 
 
-def test_pr_list_supplies_unmerged_status_when_detail_lookup_fails(
-    fake_client, fake_gateway, schedule
-):
+def test_pr_list_supplies_unmerged_status_when_detail_lookup_fails(fake_client, fake_gateway, schedule):
     pr = next(item for item in fake_gateway.pulls if item["number"] == 37)
     pr.update(merged_at=None, merged_by=None)
     original = fake_client.get_pull_request
@@ -159,9 +153,7 @@ def test_pr_list_supplies_unmerged_status_when_detail_lookup_fails(
     assert "Merge status: not merged at report generation." in format_office_status(report)
 
 
-def test_merge_only_commit_is_not_presented_as_implementation(
-    fake_client, fake_gateway, schedule
-):
+def test_merge_only_commit_is_not_presented_as_implementation(fake_client, fake_gateway, schedule):
     pr = next(item for item in fake_gateway.pulls if item["number"] == 41)
     sha = "7" * 40
     pr.update(merged_at="2026-10-24T12:00:00Z", merged_by={"login": "alice"})

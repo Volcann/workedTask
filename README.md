@@ -72,6 +72,10 @@ cleaned PR per JSONL record; `--ai` opts in to the Gemini adapter. API key and m
 must be supplied. A custom object implementing `summarize(ReportChunk) -> str` may
 be injected into `ReportService.generate` instead. The application always keeps
 raw evidence and renders overtime markers itself.
+With `--ai`, reviewed PRs can also show a one-sentence `Review impact:` line based
+only on the author's review comments. Generic "reviewed" notes and validation-only
+comments do not become impact claims. Reviews outside the shift stay in `Overtime:`.
+AI impact lines require independent evidence review before factual validation passes.
 
 Original workedTask source was absent from the upload and could not be retrieved.
 This package implements the attached workflow; it does not claim to preserve

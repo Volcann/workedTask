@@ -139,12 +139,14 @@ def test_generate_report_validates_author_aliases(bad_aliases):
 def test_generate_report_creates_snapshot_source_when_specified(tmp_path):
     snapshot_path = tmp_path / "snap.json"
     snapshot_path.write_text(
-        json.dumps({
-            "schema_version": 1,
-            "author": "alice",
-            "window": {"start": "2026-10-24T00:00:00Z", "end": "2026-10-24T23:59:59Z"},
-            "repositories": [],
-        }),
+        json.dumps(
+            {
+                "schema_version": 1,
+                "author": "alice",
+                "window": {"start": "2026-10-24T00:00:00Z", "end": "2026-10-24T23:59:59Z"},
+                "repositories": [],
+            }
+        ),
         encoding="utf-8",
     )
     config = {

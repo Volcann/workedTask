@@ -28,3 +28,20 @@ include = ["ai*", "cli*", "extractors*", "report*", "utils*", "validator*", "con
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = [".", "src"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+ignore = [
+    "E501",  # Line length is handled by the formatter.
+    "DTZ001",  # Existing datetime construction uses local time.
+    "PYI034",
+    "PYI036",
+    "TRY004",  # Config parsing raises ValueError for invalid input.
+    "S110",  # Optional model lookup falls back when unavailable.
+    "S112",
+    "FURB162",
+    "I001",  # Preserve existing import layout until it is reformatted separately.
+]

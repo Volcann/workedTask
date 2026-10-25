@@ -15,3 +15,4 @@ class ReportEntry:
     url: str = ""
     branches: tuple[str, ...] = ()
     review_state: str | None = None
+    actor_login: str | None = None

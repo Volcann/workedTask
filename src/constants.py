@@ -4,6 +4,7 @@ EXTRA_TIME_NOTE = "(The task is done in extra time)"
 
 ALLOWED_HEADINGS = {
     "Reviewed PRs:",
+    "Merged PRs:",
     "Backend PR:",
     "Frontend PR:",
     "Out of scope:",

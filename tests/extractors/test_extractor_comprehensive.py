@@ -170,8 +170,11 @@ def test_extract_project_issues_edge_cases(test_project: ProjectConfig):
 
 def test_extractor_main_block_invocation():
     extractor_path = str(Path(__file__).parents[2] / "src" / "extractors" / "daily_activity_extractor.py")
-    with patch("src.extractors.daily_activity_extractor.main", return_value=0) as mock_main:
+    with (
+        patch("sys.argv", ["daily_activity_extractor", "2026-10-21"]),
+        patch("ghtoolkit.client.GitHubClient"),
+        patch("ghtoolkit.GitHubClient"),
+    ):
         with pytest.raises(SystemExit) as exc_info:
             runpy.run_path(extractor_path, run_name="__main__")
         assert exc_info.value.code == 0
-        mock_main.assert_called_once()

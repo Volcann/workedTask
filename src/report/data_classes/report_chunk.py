@@ -18,6 +18,10 @@ class ReportChunk:
     entries: tuple[ReportEntry, ...]
     extra_time: bool
     note: str | None
+    merged_at: str | None = None
+    merged_by: str | None = None
+    merge_commit_sha: str | None = None
+    merge_status_verified: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

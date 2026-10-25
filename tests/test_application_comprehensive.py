@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -137,7 +138,15 @@ def test_generate_report_validates_author_aliases(bad_aliases):
 
 def test_generate_report_creates_snapshot_source_when_specified(tmp_path):
     snapshot_path = tmp_path / "snap.json"
-    snapshot_path.write_text("{}", encoding="utf-8")
+    snapshot_path.write_text(
+        json.dumps({
+            "schema_version": 1,
+            "author": "alice",
+            "window": {"start": "2026-10-24T00:00:00Z", "end": "2026-10-24T23:59:59Z"},
+            "repositories": [],
+        }),
+        encoding="utf-8",
+    )
     config = {
         "repositories": ["acme/widget"],
         "author": "alice",
@@ -157,7 +166,7 @@ def test_generate_report_creates_snapshot_source_when_specified(tmp_path):
 
 def test_generate_report_does_not_override_explicit_source_with_snapshot(tmp_path):
     snapshot_path = tmp_path / "snap.json"
-    snapshot_path.write_text("{}", encoding="utf-8")
+    snapshot_path.write_text('{"schema_version": 1}', encoding="utf-8")
     config = {
         "repositories": ["acme/widget"],
         "author": "alice",

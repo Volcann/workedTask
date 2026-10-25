@@ -253,7 +253,7 @@ def test_format_office_status_reviewed_pr_fallback_state():
     output = fmt.format_office_status(report)
     assert "Reviewed PRs:" in output
     assert "-> Quick PR -> PR#55" in output
-    assert "-> Verified and approved PR." in output
+    assert "-> Outcome: Approved." in output
 
 
 def test_format_office_status_reviewed_pr_commented_state_no_fallback():

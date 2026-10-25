@@ -98,6 +98,18 @@ def is_merge_commit(text: str | None) -> bool:
     )
 
 
+def _is_pr_merge_commit(entry: ReportEntry, chunk: ReportChunk) -> bool:
+    return bool(
+        entry.kind == "commit"
+        and entry.sha
+        and re.match(
+            rf"^Merge pull request #{re.escape(chunk.key)}(?:\s|$)",
+            first_line_of(entry.text),
+            re.IGNORECASE,
+        )
+    )
+
+
 def clean_commit_message(text: str | None) -> str:
     line = first_line_of(text)
     if not line:
@@ -145,6 +157,37 @@ def format_status_date(iso_date: str) -> str:
 def ensure_period(text: str) -> str:
     cleaned = text.strip()
     return cleaned if cleaned.endswith((".", "!", "?")) else f"{cleaned}."
+
+
+def _local_event_time(stamp: str, report: DailyReport) -> str:
+    return parse_timestamp(stamp).astimezone(ZoneInfo(report.timezone)).isoformat(timespec="minutes")
+
+
+def _pr_status_lines(chunk: ReportChunk, report: DailyReport) -> list[str]:
+    lines = [f"-> PR link: {chunk.url}"] if chunk.url else []
+    if not chunk.merge_status_verified:
+        lines.append("-> Merge status: unavailable from GitHub.")
+    elif chunk.merged_at:
+        actor = f" by @{chunk.merged_by}" if chunk.merged_by else " (merger unknown)"
+        sha = f"; merge SHA {chunk.merge_commit_sha}" if chunk.merge_commit_sha else ""
+        lines.append(f"-> Merged{actor} at {_local_event_time(chunk.merged_at, report)}{sha}.")
+    else:
+        lines.append("-> Merge status: not merged at report generation.")
+    return lines
+
+
+def _review_action_lines(entries: list[ReportEntry], report: DailyReport) -> list[str]:
+    lines: list[str] = []
+    for entry in entries:
+        when = _local_event_time(entry.created_at, report)
+        actor = entry.actor_login or report.author
+        link = f"; {entry.url}" if entry.url else ""
+        if entry.kind == "review":
+            state = entry.review_state or "UNKNOWN"
+            lines.append(f"-> Review by @{actor}: {state} at {when}{link}.")
+        elif entry.kind in {"review_comment", "issue_comment"}:
+            lines.append(f"-> PR comment by @{actor} at {when}{link}.")
+    return lines
 
 
 def clean_review_finding(text: str) -> list[str]:
@@ -195,6 +238,7 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
             proj,
             {
                 "reviewed": [],
+                "merged": [],
                 "backend": [],
                 "frontend": [],
                 "out_of_scope": [],
@@ -218,7 +262,17 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
                 if e.kind in {"review", "review_comment"}
                 or (e.kind == "issue_comment" and chunk.kind == "pr" and "prs" not in chunk.categories)
             ]
-            impl_entries = [e for e in regular_entries if e.kind in {"commit", "pr_created"}]
+            merge_entries = [e for e in regular_entries if e.kind == "pr_merged"]
+            pr_merge_commits = [e for e in regular_entries if _is_pr_merge_commit(e, chunk)]
+            impl_entries = [
+                e
+                for e in regular_entries
+                if e.kind in {"commit", "pr_created"}
+                and (not merge_entries or e not in pr_merge_commits)
+            ]
+
+            if merge_entries:
+                p_data["merged"].append((chunk, [*merge_entries, *pr_merge_commits]))
 
             if review_entries and not impl_entries:
                 p_data["reviewed"].append((chunk, review_entries))
@@ -239,7 +293,7 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
                     p_data["frontend"].append((chunk, impl_entries))
                 else:
                     p_data["backend"].append((chunk, impl_entries))
-            else:
+            elif not merge_entries:
                 p_data["out_of_scope"].append((chunk, regular_entries))
 
         if overtime_entries:
@@ -264,19 +318,24 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
                 else:
                     lines.append(f"-> {clean_title} -> {pr_label}")
 
-                added_finding = False
+                lines.extend(_review_action_lines(entries, report))
                 for e in entries:
                     if e.text and not e.text.startswith("(No comment"):
                         findings = clean_review_finding(e.text)
                         for finding in findings:
                             lines.append(f"-> {finding}")
-                            added_finding = True
-                if not added_finding:
-                    for e in entries:
-                        if e.review_state and e.review_state != "COMMENTED":
-                            lines.append(f"-> Verified and {e.review_state.lower()} PR.")
-                            added_finding = True
-                            break
+                lines.extend(_pr_status_lines(chunk, report))
+            lines.append("")
+
+        if p_data["merged"]:
+            lines.append("Merged PRs:")
+            for chunk, entries in p_data["merged"]:
+                _, clean_title = parse_ticket_and_title(chunk.title)
+                lines.append(f"-> {clean_title} -> PR#{chunk.key}")
+                merge_shas = [e.sha for e in entries if _is_pr_merge_commit(e, chunk) and e.sha]
+                if merge_shas:
+                    lines.append(f"-> Merge commit: {', '.join(dict.fromkeys(merge_shas))}")
+                lines.extend(_pr_status_lines(chunk, report))
             lines.append("")
 
         if p_data["backend"]:
@@ -326,6 +385,7 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
                     short_shas = [c.sha[:7] for c in commits if c.sha]
                     if short_shas:
                         lines.append(f"-> Committed: {', '.join(dict.fromkeys(short_shas))}")
+                lines.extend(_pr_status_lines(chunk, report))
                 lines.append("")
 
         if p_data["frontend"]:
@@ -375,6 +435,7 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
                     short_shas = [c.sha[:7] for c in commits if c.sha]
                     if short_shas:
                         lines.append(f"-> Committed: {', '.join(dict.fromkeys(short_shas))}")
+                lines.extend(_pr_status_lines(chunk, report))
                 lines.append("")
 
         if p_data["out_of_scope"]:
@@ -400,6 +461,7 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
                     f"-> Issue #{chunk.key}: {clean_title}" if chunk.kind == "issue" else f"-> {clean_title}"
                 )
                 if chunk.kind == "pr":
+                    lines.extend(_review_action_lines(entries, report))
                     authored_commits = [e for e in entries if e.kind == "commit" and e.sha]
                     if authored_commits:
                         non_merge = [
@@ -417,8 +479,9 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
                         for e in entries:
                             if e.text and not e.text.startswith("(No comment"):
                                 findings.extend(clean_review_finding(e.text))
-                        work_desc = findings[0] if findings else "Reviewed and verified PR."
+                        work_desc = findings[0] if findings else "PR activity recorded."
                         lines.append(f"-> {pr_label} -> {work_desc}")
+                    lines.extend(_pr_status_lines(chunk, report))
                 elif chunk.kind == "issue":
                     for entry in entries:
                         if entry.kind == "issue_comment" and entry.text.strip():
@@ -457,6 +520,7 @@ def format_overtime_breakdown_only(report: DailyReport) -> str:
             f"-> Issue #{chunk.key}: {clean_title}" if chunk.kind == "issue" else f"-> {clean_title}"
         )
         if chunk.kind == "pr":
+            lines.extend(_review_action_lines(entries, report))
             authored_commits = [e for e in entries if e.kind == "commit" and e.sha]
             if authored_commits:
                 non_merge = [
@@ -472,8 +536,9 @@ def format_overtime_breakdown_only(report: DailyReport) -> str:
                 for e in entries:
                     if e.text and not e.text.startswith("(No comment"):
                         findings.extend(clean_review_finding(e.text))
-                work_desc = findings[0] if findings else "Reviewed and verified PR."
+                work_desc = findings[0] if findings else "PR activity recorded."
                 lines.append(f"-> {pr_label} -> {work_desc}")
+            lines.extend(_pr_status_lines(chunk, report))
         elif chunk.kind == "issue":
             for entry in entries:
                 if entry.kind == "issue_comment" and entry.text.strip():

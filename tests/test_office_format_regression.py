@@ -659,7 +659,8 @@ def test_21_deduplication_and_cap_on_secondary_commits():
     bullet_lines = [
         line
         for line in text.splitlines()
-        if line.startswith("-> ") and not line.startswith("-> PR#") and not line.startswith("-> Committed:")
+        if line.startswith("-> ")
+        and not line.startswith(("-> PR#", "-> Committed:", "-> PR link:", "-> Merge status:"))
     ]
     assert len(bullet_lines) <= 3
     assert len(bullet_lines) == len(set(bullet_lines))

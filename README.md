@@ -2,13 +2,30 @@
 
 A report consumer of ghToolkit, **not a GitHub API client**.
 
-The source contains no GitHub SDK import, GitHub endpoint, HTTP client, or shell
-command. All GitHub collection, association and cleaning is reused from
+The source contains no GitHub API client or shell-based GitHub data collection.
+All GitHub collection, association and cleaning is reused from
 `GitHubHub.collect_daily_activity`. An architecture test enforces this boundary.
+For live reports, credentials come from `GITHUB_TOKEN` or `GH_TOKEN` when set;
+otherwise the program runs `gh auth token` through a subprocess to use an existing
+GitHub CLI login. If needed, run `gh auth login` once beforehand. Snapshot reports
+and injected activity sources do not require GitHub credentials.
 
 The five log categories are PRs, reviewed PRs/comments, standalone branch commits,
 issues, and daily extra tasks outside GitHub. Reports are grouped repository-wise
 and then PR/issue-wise. Non-GitHub tasks are supplied through a local JSON file.
+
+For each reported PR, the office output links to its repository-specific GitHub
+page and shows the merge status from the PR detail endpoint. A submitted review
+prints its exact GitHub state (`APPROVED`, `CHANGES_REQUESTED`, or `COMMENTED`),
+reviewer, time, and review link when available. PR comments are labeled as
+comments and do not imply approval. A merge is attributed to the account in
+GitHub's `merged_by` field; a merge commit author is not used as proof of who
+merged. Merges by the report author appear as dated PR activity even without a
+commit or comment that day. When GitHub merge metadata is unavailable, the
+report says so instead of treating the PR as unmerged. Merge status reflects
+GitHub when the report was generated; the merge timestamp remains explicit.
+An `APPROVED` review records the submitted review state and time; it does not
+by itself prove that the reviewer approved later commits pushed to the PR.
 
 Set your actual shift start/end; they have no guessed defaults. Configure a timezone
 and reporting-day cutoff. For example, a 06:00 cutoff associates 02:00 on the next

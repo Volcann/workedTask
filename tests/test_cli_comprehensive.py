@@ -188,8 +188,11 @@ def test_main_catches_all_documented_exceptions(exc_type, exc_msg, capsys):
 
 def test_cli_commands_main_block_invocation():
     commands_path = str(Path(__file__).parents[1] / "src" / "cli" / "commands.py")
-    with patch("cli.commands.main", return_value=0) as mock_main:
+    with (
+        patch("sys.argv", ["commands.py", "2026-10-24", "--repo", "acme/widget", "--author", "alice", "--shift-start", "09:00", "--shift-end", "18:00"]),
+        patch("utils.application.generate_report", return_value=MagicMock()),
+        patch("cli.commands.format_office_status", return_value=""),
+    ):
         with pytest.raises(SystemExit) as exc_info:
             runpy.run_path(commands_path, run_name="__main__")
         assert exc_info.value.code == 0
-        mock_main.assert_called_once()

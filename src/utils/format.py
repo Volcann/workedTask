@@ -195,6 +195,26 @@ def _review_action_lines(entries: list[ReportEntry], report: DailyReport) -> lis
     return lines
 
 
+def _review_outcome_line(entries: list[ReportEntry]) -> str | None:
+    """Summarize submitted review states in time order for the office report."""
+    labels = {
+        "CHANGES_REQUESTED": "requested changes",
+        "APPROVED": "approved",
+        "COMMENTED": "commented",
+    }
+    actions: list[str] = []
+    for entry in sorted(
+        (e for e in entries if e.kind == "review"), key=lambda e: parse_timestamp(e.created_at)
+    ):
+        action = labels.get(entry.review_state or "")
+        if action and (not actions or actions[-1] != action):
+            actions.append(action)
+    if not actions:
+        return None
+    sentence = ", then ".join(actions)
+    return f"-> Outcome: {ensure_period(sentence[0].upper() + sentence[1:])}"
+
+
 def clean_review_finding(text: str) -> list[str]:
     if not text:
         return []
@@ -227,7 +247,6 @@ def clean_review_finding(text: str) -> list[str]:
 def _review_summary_lines(entries: list[ReportEntry]) -> list[str]:
     """Keep the review's concrete findings together, without check-in notes."""
     findings: list[tuple[int, str]] = []
-    check_ins: list[str] = []
     seen: set[str] = set()
     for entry in entries:
         if not entry.text or entry.text.startswith("(No comment"):
@@ -250,7 +269,7 @@ def _review_summary_lines(entries: list[ReportEntry]) -> list[str]:
             r"verified and approved pr|reviewed and merged)",
             key,
         ):
-            check_ins.append(ensure_period(cleaned))
+            continue
         else:
             if len(cleaned) > 320:
                 sentences = re.split(r"(?<=[.!?])\s+(?=[A-Z])", cleaned)
@@ -267,12 +286,8 @@ def _review_summary_lines(entries: list[ReportEntry]) -> list[str]:
             priority = 0 if entry.kind == "review_comment" else 1
             findings.append((priority, ensure_period(cleaned)))
     if not findings:
-        return check_ins[:2]
+        return []
     ordered = sorted(findings, key=lambda item: item[0])[:4]
-    inline_count = sum(priority == 0 for priority, _ in findings)
-    if inline_count:
-        count_line = f"Documented {inline_count} review finding{'s' if inline_count != 1 else ''}."
-        return [count_line, *(line for _, line in ordered)]
     return [line for _, line in ordered]
 
 
@@ -280,9 +295,9 @@ def _review_ai_result(chunk: ReportChunk, report: DailyReport) -> str | None:
     return report.summaries.get(f"review:{chunk.repository or 'non-github'}:{chunk.kind}:{chunk.key}")
 
 
-def _review_impact_line(summary: str) -> str:
+def _review_feedback_line(summary: str) -> str:
     compact = re.sub(r"\s+", " ", clean_bullet_text(summary))
-    return f"-> Review impact: {ensure_period(compact)}"
+    return f"-> Review feedback: {ensure_period(compact)}"
 
 
 def extract_ticket_for_chunk(
@@ -429,16 +444,16 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
                 review_summary = _review_ai_result(chunk, report)
                 review_lines = _review_summary_lines(entries)
                 if review_summary and review_summary != "NO_FINDING":
-                    if review_lines and review_lines[0].startswith("Documented "):
-                        lines.append(f"-> {review_lines[0]}")
-                    lines.append(_review_impact_line(review_summary))
-                lines.extend(_review_action_lines(entries, report))
-                if not review_summary or review_summary == "NO_FINDING":
-                    for finding in review_lines:
-                        if review_summary == "NO_FINDING" and finding.startswith("Documented "):
-                            continue
-                        lines.append(f"-> {finding}")
-                lines.extend(_pr_status_lines(chunk, report))
+                    lines.append(_review_feedback_line(review_summary))
+                else:
+                    lines.extend(f"-> Review feedback: {finding}" for finding in review_lines)
+                outcome = _review_outcome_line(entries)
+                if outcome:
+                    lines.append(outcome)
+                if not review_lines and not outcome and review_summary in {None, "NO_FINDING"}:
+                    lines.append("-> Review recorded.")
+                if chunk.url:
+                    lines.append(f"-> PR link: {chunk.url}")
             lines.append("")
 
         if p_data["merged"]:
@@ -582,7 +597,7 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
                             entry.kind in {"review", "review_comment", "issue_comment"} for entry in entries
                         )
                     ):
-                        lines.append(_review_impact_line(review_summary))
+                        lines.append(_review_feedback_line(review_summary))
                     authored_commits = [e for e in entries if e.kind == "commit" and e.sha]
                     if authored_commits:
                         non_merge = [
@@ -652,7 +667,7 @@ def format_overtime_breakdown_only(report: DailyReport) -> str:
                 and review_summary != "NO_FINDING"
                 and any(entry.kind in {"review", "review_comment", "issue_comment"} for entry in entries)
             ):
-                lines.append(_review_impact_line(review_summary))
+                lines.append(_review_feedback_line(review_summary))
             authored_commits = [e for e in entries if e.kind == "commit" and e.sha]
             if authored_commits:
                 non_merge = [

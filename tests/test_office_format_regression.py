@@ -114,7 +114,8 @@ def test_2_pr_review_entries():
 
     assert "Reviewed PRs:" in text
     assert "-> HTM-341: Performance issues & enh -> PR#448" in text
-    assert "-> Found N+1 query in serializer and requested batching" in text
+    assert "-> Review feedback: Found N+1 query in serializer and requested batching" in text
+    assert "-> Outcome: Requested changes." in text
     assert "Backend PR:" not in text
 
     v_fmt = StrictFormatValidator.validate(text)
@@ -157,7 +158,7 @@ def test_reviewed_marker_uses_authored_findings_and_keeps_the_impact():
     status = format_office_status(report)
 
     assert "-> HTM-298: Replace KPISet versions with clones -> PR#410" in status
-    assert "-> Documented 2 review findings." in status
+    assert "Documented 2 review findings" not in status
     assert "separate clones for older versions? Otherwise, overlapping parameters" in status
     assert "lose past evaluations." in status
     assert "Adding parameters bypasses the lock on evaluated sets." in status
@@ -184,12 +185,13 @@ def test_marker_only_self_review_does_not_invent_findings():
 
     status = format_office_status(report)
 
-    assert "-> Reviewed my own PR." in status
+    assert "-> Review recorded." in status
+    assert "Review feedback:" not in status
     assert "admin edits" not in status
     assert FactualValidator.validate(status, report).is_valid
 
 
-def test_ai_review_impact_replaces_long_comments_but_keeps_review_links():
+def test_ai_review_feedback_replaces_long_comments_and_keeps_pr_link():
     entry = ReportEntry(
         id="finding",
         kind="review_comment",
@@ -212,10 +214,74 @@ def test_ai_review_impact_replaces_long_comments_but_keeps_review_links():
 
     status = format_office_status(report)
 
-    assert "-> Documented 1 review finding." in status
-    assert "-> Review impact: Flagged stale holiday attendance" in status
-    assert "#discussion_r1" in status
+    assert "Documented 1 review finding" not in status
+    assert "-> Review feedback: Flagged stale holiday attendance" in status
+    assert "-> PR link: https://github.com/acme/backend/pull/445" in status
+    assert "#discussion_r1" not in status
     assert "Could we check attendance" not in status
+    assert FactualValidator.validate(status, report).is_valid
+
+
+def test_reviewed_prs_show_feedback_and_outcome_without_event_log():
+    first = make_chunk(
+        "folium-hr-management-tool/hr-tool-backend",
+        "pr",
+        "451",
+        "HTM-341: Preserve performance cycle definitions and fix supervisor assignment race",
+        [
+            replace(
+                make_entry(
+                    "finding",
+                    "review_comment",
+                    "2026-10-19T13:49:00+05:00",
+                    text="Saving a published template removes its published version; block edits for open cycles.",
+                ),
+                url="https://github.com/example/pull/451#discussion_r1",
+            ),
+            make_entry("requested", "review", "2026-10-19T13:50:00+05:00", review_state="CHANGES_REQUESTED"),
+            make_entry("approved", "review", "2026-10-19T14:52:00+05:00", review_state="APPROVED"),
+        ],
+        ("reviewed_prs",),
+    )
+    second = make_chunk(
+        "folium-hr-management-tool/hr-tool-backend",
+        "pr",
+        "456",
+        "HMT-345: Filter salary components by required status",
+        [
+            make_entry(
+                "suggestion",
+                "review_comment",
+                "2026-10-19T13:15:00+05:00",
+                text="Good practice to move param filters in separate filters.py.",
+            ),
+            make_entry("requested2", "review", "2026-10-19T13:16:00+05:00", review_state="CHANGES_REQUESTED"),
+            make_entry("approved2", "review", "2026-10-19T13:18:00+05:00", review_state="APPROVED"),
+        ],
+        ("reviewed_prs",),
+    )
+    summary = "Saving a published template removes its published version; block edits for open cycles."
+    report = make_report(
+        "2026-10-19",
+        [first, second],
+        summaries={
+            "review:folium-hr-management-tool/hr-tool-backend:pr:451": summary,
+            "review_verified:folium-hr-management-tool/hr-tool-backend:pr:451": summary,
+            "review:folium-hr-management-tool/hr-tool-backend:pr:456": "NO_FINDING",
+        },
+    )
+
+    status = format_office_status(report)
+
+    assert status.count("-> Outcome: Requested changes, then approved.") == 2
+    assert "-> Review feedback: Saving a published template removes its published version" in status
+    assert "-> Review feedback: Good practice to move param filters in separate filters.py." in status
+    assert status.count("-> PR link:") == 2
+    assert "-> Review by" not in status
+    assert "-> PR comment by" not in status
+    assert "#discussion_r1" not in status
+    assert "Merge status: unavailable" not in status
+    assert StrictFormatValidator.validate(status).is_valid
     assert FactualValidator.validate(status, report).is_valid
 
 
@@ -306,9 +372,11 @@ def test_ai_review_impact_appears_in_overtime_when_review_was_after_shift():
 
     assert "Reviewed PRs:" not in status
     assert "Overtime:" in status
-    assert "-> Review impact: Flagged duplicate pending HR approvers." in status
+    assert "-> Review feedback: Flagged duplicate pending HR approvers." in status
     assert "-> PR#449 -> Review feedback recorded." in status
-    assert "Review impact: Flagged duplicate pending HR approvers." in format_overtime_breakdown_only(report)
+    assert "Review feedback: Flagged duplicate pending HR approvers." in format_overtime_breakdown_only(
+        report
+    )
     assert FactualValidator.validate(status, report).is_valid
 
 
@@ -770,7 +838,7 @@ def test_18_distinguish_review_from_implementation_on_same_pr():
 
     assert "Reviewed PRs:" in text
     assert "-> HTM-341: Expose period status for employee performance results -> PR#454" in text
-    assert "-> Found performance issue in employee evaluation serializer." in text
+    assert "-> Review feedback: Found performance issue in employee evaluation serializer." in text
     assert "Backend PR:" in text
     assert "HTM-341 | Expose period status for employee performance results" in text
     assert "-> PR#454 -> Fix serialization performance by batching queries" in text

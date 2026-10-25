@@ -149,7 +149,9 @@ class FactualValidator:
                     violations.append(f"PR#{pr_num} has no merge event by the author.")
 
             if chunk is not None and chunk.kind == "pr":
-                if line.startswith("-> Review impact:"):
+                if line.startswith("-> Review feedback:") and report.summaries.get(
+                    f"review:{chunk_id(chunk)}"
+                ) not in {None, "NO_FINDING"}:
                     review_key = f"review:{chunk_id(chunk)}"
                     verified_key = f"review_verified:{chunk_id(chunk)}"
                     if report.summaries.get(verified_key) != report.summaries.get(review_key):

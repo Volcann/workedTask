@@ -312,9 +312,9 @@ GEMINI_MODEL=gemini-2.5-flash-lite
 ### What AI adds
 
 - **Per-PR summary:** A one-sentence description of the PR's changes, generated from the cleaned PR chunk.
-- **Review impact:** For reviewed PRs, a one-sentence `Review impact:` line based **only** on the author's review comments. Generic "reviewed" notes and validation-only comments do not become impact claims.
+- **Review feedback:** For reviewed PRs, a short `Review feedback:` line based **only** on the author's review comments. The office report also summarizes submitted review states in order and includes one PR link. Individual event times and links remain in the activity data. Generic "reviewed" notes do not become feedback claims.
 
-> **Important:** AI impact lines require independent evidence review before factual validation passes. The application always keeps raw evidence and renders overtime markers itself. Reviews outside the shift stay in `Overtime:`.
+> **Important:** AI review feedback lines require independent evidence review before factual validation passes. The application always keeps raw evidence and renders overtime markers itself. Reviews outside the shift stay in `Overtime:`.
 
 ### JSONL export for AI handoff
 

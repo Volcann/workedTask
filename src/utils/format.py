@@ -271,6 +271,15 @@ def _review_summary_lines(entries: list[ReportEntry]) -> list[str]:
     return [line for _, line in ordered]
 
 
+def _review_ai_result(chunk: ReportChunk, report: DailyReport) -> str | None:
+    return report.summaries.get(f"review:{chunk.repository or 'non-github'}:{chunk.kind}:{chunk.key}")
+
+
+def _review_impact_line(summary: str) -> str:
+    compact = re.sub(r"\s+", " ", clean_bullet_text(summary))
+    return f"-> Review impact: {ensure_period(compact)}"
+
+
 def format_office_status(report: DailyReport, default_project: str = "HR-Tool") -> str:
     date_header = f"STATUS ({format_status_date(report.work_date)})"
     if not report.chunks:
@@ -308,9 +317,7 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
                 regular_entries.append(entry)
 
         if regular_entries:
-            has_review_action = any(
-                entry.kind in {"review", "review_comment"} for entry in regular_entries
-            )
+            has_review_action = any(entry.kind in {"review", "review_comment"} for entry in regular_entries)
             review_entries = [
                 e
                 for e in regular_entries
@@ -376,18 +383,17 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
                 else:
                     lines.append(f"-> {clean_title} -> {pr_label}")
 
-                review_summary = report.summaries.get(
-                    f"review:{chunk.repository or 'non-github'}:{chunk.kind}:{chunk.key}"
-                )
+                review_summary = _review_ai_result(chunk, report)
                 review_lines = _review_summary_lines(entries)
-                if review_summary:
+                if review_summary and review_summary != "NO_FINDING":
                     if review_lines and review_lines[0].startswith("Documented "):
                         lines.append(f"-> {review_lines[0]}")
-                    compact_summary = re.sub(r"\s+", " ", clean_bullet_text(review_summary))
-                    lines.append(f"-> Review impact: {ensure_period(compact_summary)}")
+                    lines.append(_review_impact_line(review_summary))
                 lines.extend(_review_action_lines(entries, report))
-                if not review_summary:
+                if not review_summary or review_summary == "NO_FINDING":
                     for finding in review_lines:
+                        if review_summary == "NO_FINDING" and finding.startswith("Documented "):
+                            continue
                         lines.append(f"-> {finding}")
                 lines.extend(_pr_status_lines(chunk, report))
             lines.append("")
@@ -527,6 +533,15 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
                 )
                 if chunk.kind == "pr":
                     lines.extend(_review_action_lines(entries, report))
+                    review_summary = _review_ai_result(chunk, report)
+                    if (
+                        review_summary
+                        and review_summary != "NO_FINDING"
+                        and any(
+                            entry.kind in {"review", "review_comment", "issue_comment"} for entry in entries
+                        )
+                    ):
+                        lines.append(_review_impact_line(review_summary))
                     authored_commits = [e for e in entries if e.kind == "commit" and e.sha]
                     if authored_commits:
                         non_merge = [
@@ -544,7 +559,13 @@ def format_office_status(report: DailyReport, default_project: str = "HR-Tool") 
                         for e in entries:
                             if e.text and not e.text.startswith("(No comment"):
                                 findings.extend(clean_review_finding(e.text))
-                        work_desc = findings[0] if findings else "PR activity recorded."
+                        work_desc = (
+                            "Review feedback recorded."
+                            if review_summary and review_summary != "NO_FINDING"
+                            else findings[0]
+                            if findings
+                            else "PR activity recorded."
+                        )
                         lines.append(f"-> {pr_label} -> {work_desc}")
                     lines.extend(_pr_status_lines(chunk, report))
                 elif chunk.kind == "issue":
@@ -586,6 +607,13 @@ def format_overtime_breakdown_only(report: DailyReport) -> str:
         )
         if chunk.kind == "pr":
             lines.extend(_review_action_lines(entries, report))
+            review_summary = _review_ai_result(chunk, report)
+            if (
+                review_summary
+                and review_summary != "NO_FINDING"
+                and any(entry.kind in {"review", "review_comment", "issue_comment"} for entry in entries)
+            ):
+                lines.append(_review_impact_line(review_summary))
             authored_commits = [e for e in entries if e.kind == "commit" and e.sha]
             if authored_commits:
                 non_merge = [
@@ -601,7 +629,13 @@ def format_overtime_breakdown_only(report: DailyReport) -> str:
                 for e in entries:
                     if e.text and not e.text.startswith("(No comment"):
                         findings.extend(clean_review_finding(e.text))
-                work_desc = findings[0] if findings else "PR activity recorded."
+                work_desc = (
+                    "Review feedback recorded."
+                    if review_summary and review_summary != "NO_FINDING"
+                    else findings[0]
+                    if findings
+                    else "PR activity recorded."
+                )
                 lines.append(f"-> {pr_label} -> {work_desc}")
             lines.extend(_pr_status_lines(chunk, report))
         elif chunk.kind == "issue":

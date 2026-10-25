@@ -99,6 +99,17 @@ def test_review_ai_summary_is_stored_separately_from_work_summary(activity, sche
     assert any(key.startswith("review:acme/widget:pr:") for key in report.summaries)
 
 
+def test_review_ai_no_finding_is_recorded_without_impact_claim(activity, schedule):
+    ai = SimpleNamespace(
+        summarize=Mock(return_value="Implementation summary."),
+        summarize_review=Mock(return_value="NO_FINDING"),
+    )
+    report = ReportService(source_for(activity)).generate(["acme/widget"], "alice", schedule, summarizer=ai)
+
+    assert "NO_FINDING" in report.summaries.values()
+    assert "Review impact:" not in format_office_status(report)
+
+
 def test_ai_failure_raises_unless_explicit_raw_fallback(activity, schedule):
     ai = SimpleNamespace(summarize=Mock(side_effect=RuntimeError("provider failed")))
     service = ReportService(source_for(activity))

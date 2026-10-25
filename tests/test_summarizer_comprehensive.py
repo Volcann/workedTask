@@ -57,16 +57,18 @@ def test_summarizer_init_model_empty_and_no_active_raises():
     with (
         patch.dict(os.environ, {"GEMINI_MODEL": ""}),
         patch("ai.summarizer.get_active_models", return_value=[]),
+        pytest.raises(ValueError, match="Supply --model or GEMINI_MODEL"),
     ):
-        with pytest.raises(ValueError, match="Supply --model or GEMINI_MODEL"):
-            GeminiSummarizer("", client=client)
+        GeminiSummarizer("", client=client)
 
 
 def test_summarizer_init_missing_api_keys_raises():
-    with patch.dict(os.environ, {}, clear=True):
-        with patch("utils.models.ensure_env_loaded"):
-            with pytest.raises(ValueError, match="Set GEMINI_API_KEY or GOOGLE_API_KEY"):
-                GeminiSummarizer("gemini-2.5-flash", client=None)
+    with (
+        patch.dict(os.environ, {}, clear=True),
+        patch("ai.summarizer.ensure_env_loaded"),
+        pytest.raises(ValueError, match="Set GEMINI_API_KEY or GOOGLE_API_KEY"),
+    ):
+        GeminiSummarizer("gemini-2.5-flash", client=None)
 
 
 def test_summarizer_init_missing_genai_package_raises():
@@ -77,22 +79,26 @@ def test_summarizer_init_missing_genai_package_raises():
             raise ImportError("No module named google.genai")
         return orig_import(name, *args, **kwargs)
 
-    with patch.dict(os.environ, {"GEMINI_API_KEY": "dummy_key"}):
-        with patch("builtins.__import__", side_effect=failing_import):
-            with pytest.raises(ValueError, match="Install the AI extra"):
-                GeminiSummarizer("gemini-2.5-flash", client=None)
+    with (
+        patch.dict(os.environ, {"GEMINI_API_KEY": "dummy_key"}),
+        patch("builtins.__import__", side_effect=failing_import),
+        pytest.raises(ValueError, match="Install the AI extra"),
+    ):
+        GeminiSummarizer("gemini-2.5-flash", client=None)
 
 
 def test_summarizer_init_owns_client_when_created(dummy_pr_chunk):
     fake_client = SimpleNamespace(close=MagicMock())
-    with patch.dict(os.environ, {"GEMINI_API_KEY": "dummy_key"}):
-        with patch("google.genai.Client", return_value=fake_client):
-            summarizer = GeminiSummarizer("gemini-2.5-flash", client=None)
-            assert summarizer._owns_client is True
-            assert summarizer.client is fake_client
+    with (
+        patch.dict(os.environ, {"GEMINI_API_KEY": "dummy_key"}),
+        patch("google.genai.Client", return_value=fake_client),
+    ):
+        summarizer = GeminiSummarizer("gemini-2.5-flash", client=None)
+        assert summarizer._owns_client is True
+        assert summarizer.client is fake_client
 
-            summarizer.close()
-            fake_client.close.assert_called_once()
+        summarizer.close()
+        fake_client.close.assert_called_once()
 
 
 def test_summarizer_close_does_not_close_unowned_client():

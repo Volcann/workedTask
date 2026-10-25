@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, time, timezone
+from datetime import UTC, date, datetime, time
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pytest
@@ -30,9 +30,9 @@ def test_schedule_invalid_timezone_raises():
 @pytest.mark.parametrize(
     "bad_start, bad_end, bad_day",
     [
-        (time(9, 0, tzinfo=timezone.utc), time(18, 0), time(0, 0)),
-        (time(9, 0), time(18, 0, tzinfo=timezone.utc), time(0, 0)),
-        (time(9, 0), time(18, 0), time(0, 0, tzinfo=timezone.utc)),
+        (time(9, 0, tzinfo=UTC), time(18, 0), time(0, 0)),
+        (time(9, 0), time(18, 0, tzinfo=UTC), time(0, 0)),
+        (time(9, 0), time(18, 0), time(0, 0, tzinfo=UTC)),
     ],
 )
 def test_schedule_tzinfo_in_clocks_raises(bad_start, bad_end, bad_day):

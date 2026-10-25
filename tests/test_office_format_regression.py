@@ -205,7 +205,8 @@ def test_ai_review_impact_replaces_long_comments_but_keeps_review_links():
         "2026-10-13",
         [chunk],
         summaries={
-            "review:acme/backend:pr:445": "Flagged stale holiday attendance when an employee leaves a department."
+            "review:acme/backend:pr:445": "Flagged stale holiday attendance when an employee leaves a department.",
+            "review_verified:acme/backend:pr:445": "Flagged stale holiday attendance when an employee leaves a department.",
         },
     )
 
@@ -230,7 +231,11 @@ def test_reviewed_pr_includes_conversation_finding_alongside_implementation():
         "commit", "commit", "2026-10-20T13:02:00+05:00", text="Implement approvals", sha="abc1234"
     )
     chunk = make_chunk(
-        "acme/backend", "pr", "460", "Fix approval display", [review, comment, commit],
+        "acme/backend",
+        "pr",
+        "460",
+        "Fix approval display",
+        [review, comment, commit],
         ("prs", "reviewed_prs"),
     )
     report = make_report("2026-10-20", [chunk])
@@ -240,6 +245,70 @@ def test_reviewed_pr_includes_conversation_finding_alongside_implementation():
     assert "Reviewed PRs:" in status
     assert "If no approval configuration exists" in status
     assert "Backend PR:" in status
+    assert FactualValidator.validate(status, report).is_valid
+
+
+def test_ai_no_finding_does_not_count_an_explanatory_comment_as_an_issue():
+    entry = make_entry(
+        "note",
+        "review_comment",
+        "2026-10-20T13:00:00+05:00",
+        text="UTC is intentional in this change; organization timezones are separate work.",
+    )
+    chunk = make_chunk("acme/backend", "pr", "458", "Show UTC label", [entry], ("reviewed_prs",))
+    report = make_report("2026-10-20", [chunk], summaries={"review:acme/backend:pr:458": "NO_FINDING"})
+
+    status = format_office_status(report)
+
+    assert "Documented 1 review finding" not in status
+    assert "Review impact:" not in status
+    assert "UTC is intentional" in status
+
+
+def test_unverified_ai_review_impact_needs_independent_review():
+    entry = make_entry(
+        "finding",
+        "review_comment",
+        "2026-10-20T13:00:00+05:00",
+        text="The frontend does not display the API message.",
+    )
+    chunk = make_chunk("acme/backend", "pr", "459", "Show request message", [entry], ("reviewed_prs",))
+    report = make_report(
+        "2026-10-20",
+        [chunk],
+        summaries={"review:acme/backend:pr:459": "Employees cannot see the API message."},
+    )
+
+    result = FactualValidator.validate(format_office_status(report), report)
+
+    assert not result.is_valid
+    assert any("requires independent review" in violation for violation in result.violations)
+
+
+def test_ai_review_impact_appears_in_overtime_when_review_was_after_shift():
+    entry = make_entry(
+        "finding",
+        "review_comment",
+        "2026-10-14T21:00:00+05:00",
+        text="Multiple HRs appear as pending for one request.",
+    )
+    chunk = make_chunk("acme/backend", "pr", "449", "Pending approvers", [entry], ("reviewed_prs",))
+    report = make_report(
+        "2026-10-14",
+        [chunk],
+        summaries={
+            "review:acme/backend:pr:449": "Flagged duplicate pending HR approvers.",
+            "review_verified:acme/backend:pr:449": "Flagged duplicate pending HR approvers.",
+        },
+    )
+
+    status = format_office_status(report)
+
+    assert "Reviewed PRs:" not in status
+    assert "Overtime:" in status
+    assert "-> Review impact: Flagged duplicate pending HR approvers." in status
+    assert "-> PR#449 -> Review feedback recorded." in status
+    assert "Review impact: Flagged duplicate pending HR approvers." in format_overtime_breakdown_only(report)
     assert FactualValidator.validate(status, report).is_valid
 
 

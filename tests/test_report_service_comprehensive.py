@@ -12,9 +12,21 @@ from report.service.report_service import ReportService
 
 
 def test_report_service_default_source_initialization():
-    with patch("report.service.report_service.GitHubHub") as mock_hub_cls:
+    with (
+        patch("report.service.report_service.GitHubHub") as mock_hub_cls,
+        patch("report.service.report_service.github_token", return_value="test-token") as mock_token,
+    ):
         service = ReportService()
         assert service.source is mock_hub_cls.return_value
+        mock_token.assert_called_once_with()
+        mock_hub_cls.assert_called_once_with(token="test-token")
+
+
+def test_report_service_injected_source_skips_credential_lookup():
+    source = SimpleNamespace()
+    with patch("report.service.report_service.github_token") as mock_token:
+        assert ReportService(source).source is source
+    mock_token.assert_not_called()
 
 
 @pytest.mark.parametrize("invalid_failure_mode", ["ignore", "fallback", "", None, 123])

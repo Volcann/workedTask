@@ -1,402 +1,413 @@
-# GitHub Daily Status Reporter (CLI)
+<p align="center">
+  <img src="icon.png" alt="workedTask Logo" width="128" height="128" />
+</p>
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
-[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
-[![Tested with: pytest](https://img.shields.io/badge/tested%20with-pytest-blue.svg)](https://docs.pytest.org/)
-[![Tooling: uv](https://img.shields.io/badge/tooling-uv-purple.svg)](https://github.com/astral-sh/uv)
+# workedTask
 
-**Automated daily engineering status reporter — powered by GitHub + Gemini AI.**
-_One command. Every commit, PR, and review, compiled into a clean daily report._
+**Daily GitHub work status reports with shift policy, AI summaries, and strict factual validation.**
 
-[Quick Start](#-quickstart--installation) · [The Problem](#the-problem) · [What It Does](#what-it-does) · [Key Features](#-key-features) · [Output Examples](#-output-report-format-examples) · [Architecture](#-repository-structure)
+_Connect your GitHub activity once. Get structured office-ready status reports every day._
+
+---
+
+[The Problem](#the-problem) · [The Solution](#the-solution) · [Quick Start](#quick-start) · [CLI Reference](#cli-reference) · [Configuration](#configuration) · [Programmatic API](#programmatic-api) · [AI Summaries](#ai-summaries) · [Validation](#validation) · [Architecture](#architecture)
 
 ---
 
 ## The Problem
 
-At the end of every workday, engineers face the same quiet tax:
+Filling out a daily status report requires collecting scattered information — commits across multiple repositories, PR reviews, issue comments, merge times — and formatting it correctly for your office format.
 
-> _"What exactly did I work on today? Which PRs? Which commits? Was that review in the morning or yesterday?"_
-
-Without tooling, collecting this information manually looks like this:
+### The daily status problem
 
 ```text
-Engineer
-   │
-   ├── Open GitHub → search commits by date
-   ├── Open GitHub → scroll through PR list
-   ├── Open GitHub → check review history
-   ├── Open GitHub → look up branch activity
-   ├── Reconstruct which PRs belong to which project
-   ├── Figure out which commits are yours vs. a teammate's
-   ├── Write the update in the right format
-   └── Paste it somewhere before forgetting half of it
+Without workedTask
+
+Developer
+   ├── Open GitHub and check each repo
+   ├── Find today's commits, PRs, and reviews
+   ├── Remember what counts as overtime
+   ├── Format the report manually
+   └── Do this again tomorrow
 ```
 
-That process takes **10 to 20 minutes every single day** — often longer when PRs span multiple repos, or contributions were made to a teammate's branch.
-
-Over a week, that's over an hour of engineering time spent on administration instead of engineering.
-
-### Why the manual approach breaks down
-
-**GitHub's interface is not built for daily status reporting.**
-
-Searching commits by author and date across multiple repositories is tedious. The PR list mixes open, merged, and reviewed work without a clean daily boundary. Foreign contributions — commits you authored inside someone else's PR — are invisible unless you dig through PR timelines manually.
-
-**Copy-pasting from GitHub produces inconsistent reports.**
-
-Different engineers format updates differently. Some include ticket numbers, some don't. Some list commit messages, others write summaries from memory. The result is a collection of status updates that are hard to read and impossible to audit.
-
-**The cognitive cost compounds.**
-
-By end of day, the context for morning commits has already started to fade. Reconstructing what you did, why, and in which PR — accurately — takes real effort.
-
-> **The problem isn't that engineers don't want to write status updates. The problem is that collecting the raw data to write them is slow, fragmented, and repetitive.**
+Developers who work across multiple repositories with strict shift policies need an accurate, reproducible record of what happened and when — not a summary that could be challenged later.
 
 ---
 
-## The Daily Time Problem
+## The Solution
 
-This is the core reason this tool exists.
+`workedTask` is a **report consumer of ghToolkit**, not a GitHub API client. All GitHub data collection is delegated to `ghToolkit.collect_daily_activity`. The tool applies your configured shift policy, groups activity by repository and PR, marks overtime, and formats a structured office status report.
 
-Without automation, every working day ends the same way:
+### How a report is built
 
 ```text
-Engineer
-   │
-   ├── Tab 1: GitHub commits filtered by date and author
-   ├── Tab 2: GitHub PRs created today
-   ├── Tab 3: GitHub reviews submitted today
-   ├── Tab 4: Check branch for standalone commits
-   ├── Tab 5: Cross-reference which repo belongs to which project
-   └── Write it all up from memory
+GitHub API
+     |
+     v
+ghToolkit (activity collection + association)
+     |
+     v
+workedTask ReportService
+     ├── Shift policy (timezone, start, end, day cutoff)
+     ├── PR grouping (commits, reviews, comments, merges)
+     ├── Overtime marker: "(The task is done in extra time)"
+     ├── Manual non-GitHub tasks (JSON file)
+     └── Optional: Gemini AI per-PR summaries
+          |
+          v
+     Office status report  →  stdout / file
+          |
+          v
+     StrictFormatValidator + FactualValidator
 ```
 
-With this tool:
+### Five activity categories
 
-```text
-Engineer
-   │
-   └── status-reporter --date today
-              │
-              ▼
-         GitHub API
-              │
-        ┌─────┼─────┐
-        ▼     ▼     ▼
-      PRs  Reviews  Branches
-        │     │     │
-        └─────┼─────┘
-              ▼
-       Formatted Report
-              │
-        ┌─────┴─────┐
-        ▼           ▼
-    Terminal     .txt file
-```
-
-**15 minutes saved. Every day.**
-
-That is over an hour a week returned to actual engineering work.
+| Category | Description |
+| --- | --- |
+| **PRs** | Authored pull requests with merge status from GitHub's `merged_by` field |
+| **Reviewed PRs / Comments** | Submitted review state (`APPROVED`, `CHANGES_REQUESTED`, `COMMENTED`) with reviewer, time, and link |
+| **Standalone branch commits** | Commits on branches not associated with a PR |
+| **Issues** | Issue activity attributed to the configured author |
+| **Manual tasks** | Non-GitHub tasks supplied through a local JSON file |
 
 ---
 
-## What It Does
+## Quick Start
 
-This CLI queries GitHub directly for a given date and compiles everything into a formatted status report.
+### Prerequisites
 
-It:
+- Python 3.11 or newer
+- A GitHub token (`GITHUB_TOKEN` or `GH_TOKEN`) — or an existing `gh auth login` session
+- `uv` (recommended) or `pip`
 
-1. Fetches all commits authored by the configured contributor on that date.
-2. Identifies which commits belong to your own PRs and which were contributed to a teammate's PR.
-3. Scans reviewed PRs from that day.
-4. Detects standalone branch commits not yet tied to a PR.
-5. Groups everything by project and domain (Backend / Frontend).
-6. Formats it into clean, structured bullet points.
-7. Prints the report to the terminal and saves it to a `.txt` file automatically.
-
-The engineer doesn't have to open GitHub at all.
-
-They just run one command.
-
----
-
-## 🌟 Key Features
-
-1. **Date-Driven Activity Retrieval**:
-   - Accepts flexible date formats: `11-SEP-2026`, `2026-09-11`, `today`, `yesterday`, etc.
-   - Automatically queries GitHub for all commits authored, PRs created, and PRs reviewed on that day.
-2. **Comprehensive Contribution Mapping**:
-   - **Own PRs**: Full PR details, titles, tickets, and associated commit summaries.
-   - **Foreign PR Contributions**: Detects commits authored by the configured contributor in another teammate's PR and formats them as:
-     `-> PR#<num> -> Contributed authored commit(s) to this PR.`
-   - **Conservative Attribution**: Mixed-author PRs are summarized only from commits attributed to the configured contributor. If no authored commit evidence is available, the report records the PR activity without claiming its implementation.
-   - **Branch Commits**: Identifies standalone commits pushed to a branch not yet tied to a PR:
-     `Inside branch <branch_name>: -> <commit message>`
-   - **Reviewed PRs**: Tracks PRs reviewed and approved/commented on during that day.
-3. **Multi-Project & Frontend/Backend Domain Separation**:
-   - Categorizes updates by project (e.g. `HR-Tool`) and domain (`Backend PR:`, `Frontend PR:`).
-4. **Dynamic Configuration (`projects.json`)**:
-   - Configure unlimited repositories with custom project names, categories, and author handles.
-   - CLI commands to dynamically list, add, and remove repositories.
-5. **Dual Report Delivery**:
-   - Prints formatted status report directly to the terminal stdout.
-   - Automatically saves the report separately to a `.txt` file (e.g., `reports/status_report_11_SEP_2026.txt` or custom `--output`).
-6. **AI-Enhanced & Deterministic Modes**:
-   - Supports Gemini (`google-genai`) for executive summarization when `GEMINI_API_KEY` is present.
-   - Robust deterministic rule-based engine as fallback for offline or zero-API environments.
-
----
-
-## 🚀 Quickstart & Installation
-
-### Using `uv` (Recommended)
+### Install
 
 ```bash
-# Clone the repository
-git clone https://github.com/Volcann/workedTask.git
-cd workedTask
+# With uv (recommended)
+cd /path/to/utils
+uv sync --all-packages --extra dev
 
-# Create virtual environment and install with uv
-uv venv
+# With pip + venv
+python -m venv .venv
 source .venv/bin/activate
-uv pip install -e ".[dev]"
+pip install -e ./ghToolkit -e ./workedTask
 ```
 
-### Using standard `pip`
+For AI summaries, install the optional extra:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e './workedTask[ai]'
+```
+
+### Configure
+
+```bash
+cp .env.example .env
+# Edit .env and set your GEMINI_API_KEY if using AI
+```
+
+Create a configuration file:
+
+```json
+{
+  "repositories": ["owner/repo-one", "owner/repo-two"],
+  "author": "your-github-login",
+  "timezone": "Asia/Karachi",
+  "shift_start": "11:00",
+  "shift_end": "20:00",
+  "day_start": "06:00"
+}
+```
+
+Save it as `worked-task.json` or pass it with `--config`.
+
+### Run
+
+```bash
+# Today's report
+make today
+
+# Specific date
+worked-task 2026-10-24 --config worked-task.json
+
+# With AI summaries
+worked-task 2026-10-24 --config worked-task.json --ai --model gemini-2.5-flash-lite
 ```
 
 ---
 
-## 📋 Configuration (`projects.json`)
+## CLI Reference
 
-The CLI dynamically reads repository mappings from `projects.json`.
+```text
+worked-task [date] [options]
+status-report [date] [options]     # alias
+python -m src [date] [options]     # direct
+```
+
+### Positional
+
+| Argument | Description |
+| --- | --- |
+| `date` | Work date in `YYYY-MM-DD`; defaults to current configured reporting day |
+
+### Options
+
+| Flag | Description |
+| --- | --- |
+| `--config PATH` | JSON configuration file; or set `WORKED_TASK_CONFIG` |
+| `--repo owner/repo` | Override repositories (repeat for multiple) |
+| `--author LOGIN` | Override report author |
+| `--alias LOGIN` | Additional author aliases (repeat for multiple) |
+| `--timezone TZ` | IANA timezone name (e.g. `Asia/Karachi`) |
+| `--shift-start HH:MM` | Shift start time (local) |
+| `--shift-end HH:MM` | Shift end time (local) |
+| `--day-start HH:MM` | Reporting-day cutoff; use `06:00` to include next-day 02:00 |
+| `--workers N` | Parallel repository fetches (1–8) |
+| `--manual-tasks PATH` | JSON file of non-GitHub tasks |
+| `--snapshot PATH` | Replay a ghToolkit snapshot without network access |
+| `--ai` | Enable Gemini AI per-PR summaries |
+| `--model NAME` | Gemini model identifier; or set `GEMINI_MODEL` |
+| `--ai-failure MODE` | `raise` (default) or `keep-raw` on AI error |
+| `--format office` | Report format (`office` is the only supported format) |
+| `--output PATH` | Write report to file (atomic replacement) |
+| `--chunks-output PATH` | Write one cleaned PR per JSONL line for AI handoff |
+
+### Make targets
+
+```bash
+make today          # Report for today
+make yesterday      # Report for yesterday
+make extract DATE=2026-10-24   # Report for a specific date
+make test           # Run pytest suite
+make lint           # Run ruff linter and format check
+make format         # Auto-format code with ruff
+make clean          # Clean cache and build files
+```
+
+---
+
+## Configuration
+
+All configuration keys can be set in a JSON file and overridden by CLI flags. Paths in the configuration file are relative to the **working directory**, not the file's location.
+
+```json
+{
+  "repositories": ["owner/repo"],
+  "author": "your-login",
+  "author_aliases": ["alt-login"],
+  "timezone": "Asia/Karachi",
+  "shift_start": "11:00",
+  "shift_end": "20:00",
+  "day_start": "06:00",
+  "workers": 2,
+  "manual_tasks": "tasks.json",
+  "ai": false,
+  "model": "gemini-2.5-flash-lite",
+  "ai_failure": "raise"
+}
+```
+
+### Shift and overtime policy
+
+The regular shift **includes** `shift_start` and **excludes** `shift_end`. Any activity before the start or at/after the end is marked as overtime:
+
+```text
+(The task is done in extra time)
+```
+
+A `day_start` of `06:00` associates activity between 06:00 on the work date and 06:00 the following calendar day with a single reporting day. A 22:00–06:00 overnight shift does not mark 02:00 as overtime if it falls within the configured window.
+
+> **Note:** Set your actual shift times. There are no guessed defaults. Non-existent DST clock times are rejected, and ambiguous times use the first occurrence. Date-only and timezone-free manual timestamps are rejected.
+
+### Shift Baseline (Lahore, Pakistan)
+
+| Setting | Value |
+| --- | --- |
+| Timezone | `Asia/Karachi` (PKT, UTC+05:00) |
+| Shift | 11:00 AM – 8:00 PM PKT |
+| Overtime condition | `t < 11:00 OR t >= 20:00 PKT` |
+| Mandatory overtime marker | `(The task is done in extra time)` |
+
+### Manual tasks
+
+Non-GitHub tasks can be supplied in a JSON file:
 
 ```json
 [
   {
-    "name": "HR-Tool",
-    "category": "Backend",
-    "owner": "MoneyTalks-vantaggio",
-    "repo": "backend",
-    "author": "Volcann"
-  },
-  {
-    "name": "HR-Tool",
-    "category": "Frontend",
-    "owner": "MoneyTalks-vantaggio",
-    "repo": "frontend",
-    "author": "Volcann"
+    "title": "Sprint planning meeting",
+    "timestamp": "2026-10-24T14:30:00+05:00"
   }
 ]
 ```
 
-### Managing Projects via CLI
+---
 
-```bash
-# List all active projects
-status-reporter projects list
+## Programmatic API
 
-# Add or update a project
-status-reporter projects add --name "HR-Tool" --owner "MoneyTalks-vantaggio" --repo "backend" --category "Backend" --author "Volcann"
+```python
+from utils import format_office_status, generate_report
 
-# Remove a project
-status-reporter projects remove --owner "MoneyTalks-vantaggio" --repo "backend"
+report = generate_report(
+    {
+        "repositories": ["owner/repo"],
+        "author": "your-login",
+        "timezone": "Asia/Karachi",
+        "shift_start": "11:00",
+        "shift_end": "20:00",
+        "day_start": "06:00",
+    },
+    "2026-10-24",
+)
+print(format_office_status(report))
+```
+
+### Inject a custom summarizer
+
+```python
+from utils import generate_report
+from ai.summarizer import Summarizer
+from report.data_classes import ReportChunk
+
+
+class MySummarizer:
+    def summarize(self, chunk: ReportChunk) -> str:
+        return f"Summary of {chunk.pr_title}"
+
+
+report = generate_report(config, "2026-10-24", summarizer=MySummarizer())
+```
+
+### Replay a snapshot
+
+```python
+from ghtoolkit import SnapshotSource
+from utils import generate_report
+
+report = generate_report(
+    {**config, "snapshot": "activity-snapshot.json"},
+    "2026-10-24",
+)
 ```
 
 ---
 
-## 💻 CLI Usage
+## AI Summaries
 
-### Generate Daily Report for a Date
-
-```bash
-# Query status for a specific date
-status-reporter --date 11-SEP-2026
-
-# Query today or yesterday
-status-reporter --date today
-status-reporter --date yesterday
-
-# Filter by project or category
-status-reporter --date 11-SEP-2026 --project "HR-Tool"
-status-reporter --date 11-SEP-2026 --category "Backend"
-
-# Specify a custom report output file
-status-reporter --date 11-SEP-2026 --output custom_status.txt
-
-# Run with default Gemini 3.5 Flash Lite
-status-reporter --date 11-SEP-2026
-
-# Run offline without AI API calls
-status-reporter --date 11-SEP-2026 --no-ai
-
-# Clean unused reports (keeps active/latest report)
-status-reporter clean-reports
-
-# Clean all reports
-status-reporter clean-reports --all
-```
-
-### ⚡ Quick Execution with `make`
+`workedTask` does **not** select an AI provider automatically. Pass `--ai` to opt in.
 
 ```bash
-# Run for a specific day (defaults to gemini-2.5-flash-lite)
-make status DATE=11-SEP-2026
-
-# Alias
-make run DATE=16-SEP-2026
-
-# Override model if desired
-make status DATE=11-SEP-2026 MODEL=gemini-2.5-flash-lite
-
-# Run for today or yesterday
-make today
-make yesterday
-
-# Filter by project or category
-make status DATE=11-SEP-2026 PROJECT=HR-Tool
-make status DATE=11-SEP-2026 CATEGORY=Backend
-
-# Run offline without AI API calls
-make status DATE=11-SEP-2026 NO_AI=1
-
-# Clean unused reports (keeps active report currently in use)
-make clean-reports
-
-# Clean all generated reports
-make clean-reports ALL=1
-
-# Keep a specific report and delete all others
-make clean-reports KEEP=24-SEP-2026
-
-# Run canonical prompt demos
-make demo1
-make demo2
-make demo3
+worked-task 2026-10-24 --ai --model gemini-2.5-flash-lite
 ```
+
+Set credentials in `.env` or your environment:
+
+```bash
+GEMINI_API_KEY=your-key
+GEMINI_MODEL=gemini-2.5-flash-lite
+```
+
+### What AI adds
+
+- **Per-PR summary:** A one-sentence description of the PR's changes, generated from the cleaned PR chunk.
+- **Review feedback:** For reviewed PRs, a short `Review feedback:` line based **only** on the author's review comments. The office report also summarizes submitted review states in order and includes one PR link. Individual event times and links remain in the activity data. Generic "reviewed" notes do not become feedback claims.
+
+> **Important:** AI review feedback lines require independent evidence review before factual validation passes. The application always keeps raw evidence and renders overtime markers itself. Reviews outside the shift stay in `Overtime:`.
+
+### JSONL export for AI handoff
+
+```bash
+worked-task 2026-10-24 --chunks-output chunks.jsonl
+```
+
+Each line is one cleaned PR record. Use this to feed chunks to any AI pipeline.
 
 ---
 
-## 📄 Output Report Format Examples
+## Validation
 
-### Example 1 (Frontend & Backend PRs)
+The package includes two validators for generated reports.
+
+### StrictFormatValidator
+
+Checks structural correctness:
+- `STATUS (DD-MMM-YYYY)` header format
+- Project → Conditional Sections → `->` bullets hierarchy
+- No malformed section headers or bullet symbols
+
+```python
+from validator import StrictFormatValidator
+
+result = StrictFormatValidator().validate(report_text)
+print(result.passed, result.errors)
+```
+
+### FactualValidator
+
+Links each report line to a source `DailyReport` activity snapshot:
+
+```python
+from validator import FactualValidator
+
+result = FactualValidator().validate(report_text, daily_report)
+print(result.source_consistency_percent)  # % of lines with evidence
+```
+
+`source_consistency_percent` measures whether the generated report is **reproducible from its evidence snapshot** — not a guarantee that PR titles, commit messages, or AI summaries are accurate. A separate live GitHub and code review is needed before making an external factual-accuracy claim.
+
+> **Note:** `fact_support_percent` remains available as a legacy alias for `source_consistency_percent`.
+
+---
+
+## Architecture
+
+`workedTask` enforces a strict separation: it contains **no GitHub API client** and **no shell-based GitHub data collection**. An architecture test enforces this boundary.
+
 ```text
-STATUS (11-SEP-2026)
-HR-Tool
-
-Backend PR:
-HMT-258 | Add search and natural sorting to device mappings
--> PR#348 -> Added search and natural sorting to device-user listings and unmapped-punch APIs with deterministic ordering, updated OpenAPI docs, and full test coverage.
-
-HMT-258 | Updated permission checks for org super-admins and admins
--> PR#349 -> Restricted org super-admin permissions to evaluate strictly against ADMIN_PERMISSION_CODENAMES and added test coverage confirming org admins lack punch approval access.
--> Tested the command.
-
-HTM-228: feat - adopt AXI guidelines and gh-axi for token-efficient GitHub operations
--> PR#350 -> Optimized AI agent workflows by integrating the gh-axi standard into AGENTS.md, replacing bulky JSON outputs with token-efficient formatting. Reduced token overhead by 32–55% across GitHub operations, eliminating context flooding and significantly lowering the risk of LLM hallucinations. Benchmarked and shared comparative performance reports in this PR summary, which can be revalidated later. The results demonstrate the efficiency gains of gh-axi over legacy JSON outputs.
-
-Frontend PR:
-HMT-258: BE | Employee Unmapping & Attendance Handling Issues
--> PR#275 -> Refactored mapped/unmapped device user tables with debounced search, improved loading states, and refreshed UI styling.
-```
-
-### Example 2 (Reviewed PRs & Foreign Contributions)
-```text
-STATUS (16-SEP-2026)
-HR-Tool
-Reviewed PRs:
--> MB-228: Payroll run -> PR#359
-
-MB-228: Payroll run
--> PR#359 -> Contributed authored commit(s) to this PR.
--> Machine Logs API: Added missing employee profile pictures to the /api/v1/devices/machine-logs/ response payload.
--> Timesheet Attendance (HTM-228): Excluded soft-deleted users by removing include_soft_deleted; regression tests and Ruff passed (Committed: fd3cfbc).
--> Tardiness vs. Absence Logic: Filtered absent users out of tardiness calculations inside compute_organization_tardiness_records() while keeping absent_count stats accurate; 30 tests and Ruff passed (Pending commit/push).
--> Increases total test coverage to over 92% by adding comprehensive test suites across permissions, reporting, and accounts, while successfully implementing and validating core payroll processing, compensation APIs, and benefit enrollments.
-
-HTM-211 | Reorganizes shift services
--> PR#375 -> Restructures shift and attendance services into isolated domain packages for gap filling, persistence, and punch requests, resolving circular dependencies while preserving existing API behavior.
-
--> Edge Case Identified: While refactoring and testing, found that a database constraint blocks duplicate punch requests ("already punched"). Need product/business logic confirmation on whether users should be allowed to submit a punch request for that same time.
-
-HTM-282 | Enhance Leave Request Validation
--> #376 -> Refactors leave duration logic to accurately calculate effective end times for partial and full-day leaves, adding tests to validate maximum consecutive day policy enforcement and unauthorized request handling.
-
--> Please debug the device issue. I shared the details of the successfully connected device with Moin.
-```
-
----
-
-## 🧪 Testing & Code Quality
-
-Run tests using `pytest`:
-
-```bash
-pytest
-```
-
-Run linter and code formatter checks using `ruff`:
-
-```bash
-ruff check .
-ruff format --check .
-```
-
-Run pre-commit hooks:
-
-```bash
-pre-commit run --all-files
-```
-
----
-
-## 📁 Repository Structure
-
-```
-workedTask/
-├── .github/
-│   └── workflows/
-│       └── ci.yml             # GitHub Actions CI workflow
-├── .pre-commit-config.yaml    # Pre-commit configuration (ruff, trailing-whitespace, etc.)
-├── pyproject.toml             # Modern PEP 517/621 build and tool definitions
-├── projects.json              # Dynamic project configurations
-├── README.md                  # Comprehensive documentation
-├── reports/                   # Saved daily status report .txt files
+workedTask
 ├── src/
-│   └── status_reporter/
-│       ├── __init__.py        # Package root and version
-│       ├── __main__.py        # python -m status_reporter entrypoint
-│       ├── ai_enhancer.py     # Gemini AI summarization engine
-│       ├── cli.py             # Rich CLI argument parser and execution handler
-│       ├── collector.py       # Activity scanner for PRs, commits, reviews, branches
-│       ├── config.py          # projects.json loader, dynamic manager, and env loader
-│       ├── demo_data.py       # Canonical reference datasets for prompt examples
-│       ├── formatter.py       # Canonically styled report renderer
-│       ├── models.py          # Strongly typed domain dataclasses
-│       └── utils.py           # Date parsers, ticket regex, and string cleaners
-└── tests/
-    ├── conftest.py            # Shared fixtures
-    ├── test_cli.py            # CLI commands, options, and file output tests
-    ├── test_collector.py      # Aggregation, foreign contribution, and branch tests
-    ├── test_config.py         # Dynamic projects.json configuration tests
-    ├── test_date_utils.py     # Multi-format date parsing and text cleaning tests
-    ├── test_formatter.py      # Formatting fidelity tests for Examples 1, 2, and 3
+│   ├── cli/           — CLI entry point (worked-task / status-report)
+│   ├── report/        — ReportService, DailyReport, ReportChunk data classes
+│   ├── extractors/    — DailyActivityExtractor (delegates to ghToolkit)
+│   ├── ai/            — GeminiSummarizer, Summarizer protocol
+│   ├── validator/     — StrictFormatValidator, FactualValidator
+│   ├── utils/         — format_office_status, generate_report, render
+│   ├── config/        — Configuration loading and schedule parsing
+│   └── constants.py   — Active free Gemini model registry
+├── tests/             — pytest suite (architecture, CLI, AI, validators)
+├── Makefile           — Developer shortcuts
+└── pyproject.toml     — Package metadata (name: status-reporter, v0.2.0)
 ```
 
+### Merge attribution
+
+- A merge is attributed to the account in GitHub's `merged_by` field. A merge commit author is **not** used as proof of who merged.
+- Merges by the report author appear as dated PR activity even without a commit or comment that day.
+- When GitHub merge metadata is unavailable, the report says so instead of treating the PR as unmerged.
+- Merge status reflects GitHub at the time the report was generated; the merge timestamp remains explicit.
+
+### Review attribution
+
+- A submitted review prints its exact GitHub state (`APPROVED`, `CHANGES_REQUESTED`, or `COMMENTED`), reviewer, time, and review link when available.
+- PR comments are labeled as comments and **do not imply approval**.
+- An `APPROVED` review records the submitted review state and time; it does not prove that the reviewer approved commits pushed to the PR after the review.
+
+### Authentication
+
+For live reports, credentials come from `GITHUB_TOKEN` or `GH_TOKEN` when set; otherwise the program runs `gh auth token` through a subprocess to use an existing GitHub CLI login. Run `gh auth login` once beforehand if needed. Snapshot reports and injected activity sources do not require GitHub credentials.
+
 ---
 
-## The Idea in One Sentence
+## Related
 
-> **This tool turns a 15-minute daily ritual of manually hunting GitHub for your own activity into a single command — giving engineers back over an hour every week to spend on actual engineering.**
+- **[ghToolkit](../ghToolkit)** — The GitHub activity collection layer used by this package
+- **[Aevora](https://github.com/Volcann/Aevora)** — AI chat platform that exposes `report_status` as a Celery tool via this package
+- **[lazy-reviewer](../lazy-reviewer)** — PR review utility companion
 
 ---
 
-## License
-
-MIT. Built for engineers who are tired of spending end-of-day energy on log collection instead of shipping.
+<p align="center">
+  <sub>workedTask · status-reporter v0.2.0 · Python 3.11+</sub>
+</p>

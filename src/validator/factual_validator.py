@@ -61,6 +61,8 @@ class FactualValidator:
             if line.startswith("STATUS (") or line in {"HR-Tool", "Foster Ferret", EXTRA_TIME_NOTE}:
                 continue
 
+            pr_match = re.search(r"PR#(\d+)", line)
+            pr_num = int(pr_match.group(1)) if pr_match else None
             candidates = sources.get((current_section, line), [])
             is_chunk_header = current_section in {"Backend PR:", "Frontend PR:"} and not line.startswith(
                 ("->", "(")
@@ -73,6 +75,19 @@ class FactualValidator:
                 scoped = [c for c in candidates if label in (c.repository or "").lower()]
                 if len(scoped) == 1:
                     chunk = scoped[0]
+            if (
+                chunk is None
+                and not is_chunk_header
+                and active_chunk is not None
+                and (pr_num is not None or line.startswith("-> Committed:"))
+            ):
+                chunk = active_chunk
+            if chunk is None and pr_num is not None:
+                same_number = [
+                    c for c in report.chunks if c.kind == "pr" and c.key == str(pr_num)
+                ]
+                if len(same_number) == 1:
+                    chunk = same_number[0]
 
             if is_chunk_header:
                 current_ticket = line.split("|", 1)[0].strip() if "|" in line else None
@@ -81,9 +96,7 @@ class FactualValidator:
             if chunk is not None:
                 active_chunk = chunk
 
-            pr_match = re.search(r"PR#(\d+)", line)
-            pr_num = int(pr_match.group(1)) if pr_match else None
-            commit_match = re.fullmatch(r"-> Committed:\s*([0-9a-fA-F,\s]+)", line)
+            commit_match = re.fullmatch(r"-> (?:Committed|Merge commit):\s*([A-Za-z0-9,\s]+)", line)
             commit_shas = (
                 [sha.strip().lower() for sha in commit_match.group(1).split(",") if sha.strip()]
                 if commit_match
@@ -92,12 +105,20 @@ class FactualValidator:
             claim_type = "general"
             if current_section == "Reviewed PRs:":
                 claim_type = "review"
+            elif current_section == "Merged PRs:":
+                claim_type = "merge"
             elif current_section in {"Backend PR:", "Frontend PR:"}:
                 claim_type = "pr_implementation" if pr_num else "commit"
             elif current_section == "Out of scope:":
                 claim_type = "out_of_scope"
             elif current_section == "Overtime:":
                 claim_type = "overtime"
+            if line.startswith(("-> Merged", "-> Merge status:")):
+                claim_type = "merge_status"
+            elif line.startswith("-> Review by"):
+                claim_type = "review_action"
+            elif line.startswith("-> PR comment by"):
+                claim_type = "pr_comment"
 
             verified = index in matched and chunk is not None
             evidence_id = chunk_id(chunk) if chunk is not None else None
@@ -121,8 +142,16 @@ class FactualValidator:
                 ):
                     verified = False
                     violations.append(f"PR#{pr_num} has no implementation event by the author.")
+                elif claim_type == "merge" and not any(e.kind == "pr_merged" for e in chunk.entries):
+                    verified = False
+                    violations.append(f"PR#{pr_num} has no merge event by the author.")
 
             if chunk is not None and chunk.kind == "pr":
+                if line.startswith("-> Merged") and not (
+                    chunk.merge_status_verified and chunk.merged_at
+                ):
+                    verified = False
+                    violations.append(f"PR#{chunk.key} has no verified merge metadata.")
                 summary = report.summaries.get(chunk_id(chunk))
                 if summary and line == f"-> PR#{chunk.key} -> {clean_bullet_text(summary)}":
                     verified = False
@@ -147,9 +176,21 @@ class FactualValidator:
                         verified = False
                         violations.append(f"Commit {sha} occurred during the regular shift.")
 
+            is_pr_metadata = line.startswith(("-> PR link:", "-> Merge status:", "-> Merged"))
+            merge_happened_overtime = bool(
+                chunk is not None
+                and chunk.kind == "pr"
+                and line.startswith("-> Merged")
+                and any(
+                    e.kind == "pr_merged" and is_out_of_report_shift(e.created_at, report)
+                    for e in chunk.entries
+                )
+            )
+
             if (
                 current_section == "Overtime:"
                 and chunk is not None
+                and not is_pr_metadata
                 and not any(is_out_of_report_shift(e.created_at, report) for e in chunk.entries)
             ):
                 verified = False
@@ -166,7 +207,8 @@ class FactualValidator:
                     evidence_id=evidence_id,
                     verified=verified,
                     source=source_url,
-                    extra_time=current_section == "Overtime:",
+                    extra_time=current_section == "Overtime:"
+                    and (not is_pr_metadata or merge_happened_overtime),
                 )
             )
 

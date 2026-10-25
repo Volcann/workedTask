@@ -219,3 +219,7 @@ __marimo__/
 
 # Generated reports
 reports/*.txt
+
+# Project configuration
+projects.json
+
